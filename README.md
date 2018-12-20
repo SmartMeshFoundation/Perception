@@ -73,8 +73,8 @@ AUTHOR:
 COMMANDS:
      version
      genkey
-     console  一个简单的交互控制台，用来调试
-     attach   连接本地已启动的进程
+     console  A simple interactive console for debugging
+     attach   Connect locally started processes
      help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
