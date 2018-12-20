@@ -54,6 +54,45 @@ __more platform compiled__
 
 # Example:
 
+## Run Perception
+
+```bash
+#> build/perception -h
+NAME:
+   build/perception - P2P network program
+
+USAGE:
+   perception [global options] command [command options] [arguments...]
+
+VERSION:
+   0.0.1-beta
+
+AUTHOR:
+   liangc <cc14514@icloud.com>
+
+COMMANDS:
+     version
+     genkey
+     console  一个简单的交互控制台，用来调试
+     attach   连接本地已启动的进程
+     help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --seed                         start as a bootnode rule
+   --port value, -p value         listen port (default: 40001)
+   --rpcport value                http rpc listen port (default: 40080)
+   --homedir value                set home dir
+   --netkey value, -n value       set network key for private net, use 'genkey' subcommand to get a key
+   --datadir value                set data dir , you can read and write this directories.
+   --loglevel value               0:error , 1:warning , 2:info , 3:debug (default: 2)
+   --pprof                        record cpu、mem、block pprof info.
+   --agentclient value, -c value  support web3rpc、web3ws、ipfsapi、ipfsgateway , format : name1:port1,name2:port2
+   --agentserver value, -s value  support web3rpc、web3ws、ipfsapi、ipfsgateway , format : name1:port1,name2:port2
+   --help, -h                     show help
+   --version, -v                  print the version
+```
+
+
 ## ipfs agent (ipfs light node)
 
 * ipfs api default listen on tcp 5001 
