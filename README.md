@@ -75,7 +75,7 @@ COMMANDS:
      genkey
      console  A simple interactive console for debugging
      attach   Connect locally started processes
-     help, h  Shows a list of commands or help for one command
+     help, h  Show a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --seed                         start as a bootnode rule
