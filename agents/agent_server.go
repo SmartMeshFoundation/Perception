@@ -2,12 +2,15 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
+	"gx/ipfs/QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN/go-libp2p-protocol"
+	"math/big"
 	"net"
 	"sync"
 	"time"
@@ -27,35 +30,77 @@ func NewAgentServer(astab *Astable) *AgentServerImpl {
 	return &AgentServerImpl{astab.node, astab}
 }
 
+func (self *AgentServerImpl) SetupReport(cfg types.AgentCfg) error {
+	n, _, _, err := cfg.Open()
+	fmt.Println("YYYYY", n, err)
+	fmt.Println("YYYYY", n, err)
+	fmt.Println("YYYYY", n, err)
+	fmt.Println("YYYYY", n, err)
+	fmt.Println("YYYYY", n, err)
+	if err != nil {
+		return err
+	}
+
+	switch protocol.ID(n) {
+	case params.P_AGENT_IPFS_API, params.P_AGENT_IPFS_GATEWAY:
+		enableReport("ipfs")
+	default:
+		return errors.New("not_support_report_yet : " + n)
+	}
+	return nil
+}
+
+func (self *AgentServerImpl) FetchReport(k, startDate, endDate string) (map[string]interface{}, error) {
+	return Report(k, startDate, endDate), nil
+}
+
 func (self *AgentServerImpl) Start() {
 	ast := self.table
 	myid := self.node.Host().ID()
 	// flush agent-server table
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_ADD_AS_TAB)
-	if Web3RpcAgentConfig != "" {
-		ast.Append(params.P_AGENT_WEB3_RPC, myid)
-		am.Append(params.P_AGENT_WEB3_RPC, myid)
-	}
-	if Web3WsAgentConfig != "" {
-		ast.Append(params.P_AGENT_WEB3_WS, myid)
-		am.Append(params.P_AGENT_WEB3_WS, myid)
-	}
-	if IpfsApiAgentConfig != "" {
-		ast.Append(params.P_AGENT_IPFS_API, myid)
-		am.Append(params.P_AGENT_IPFS_API, myid)
-	}
-	if IpfsGatewayAgentConfig != "" {
-		ast.Append(params.P_AGENT_IPFS_GATEWAY, myid)
-		am.Append(params.P_AGENT_IPFS_GATEWAY, myid)
-	}
-	if RestAgentConfig != "" {
-		ast.Append(params.P_AGENT_REST, myid)
-		am.Append(params.P_AGENT_REST, myid)
-	}
-	if am.AgentServerList != nil {
-		log4go.Info("Broadcast self as agent-server in new thread.")
-		go ast.KeepBroadcast(context.Background(), myid, am, params.AgentServerBroadcastInterval)
-	}
+	go func() {
+		for i := 0; i < 20; i++ {
+			if selfgeo := self.node.GetGeoLocation(); selfgeo != nil {
+				am.Location = &agents_pb.AgentMessage_Location{
+					Longitude: float32(selfgeo.Longitude),
+					Latitude:  float32(selfgeo.Latitude),
+				}
+				log4go.Info("🛰️ Broadcast AS info take Location : %v", selfgeo)
+				break
+			}
+			log4go.Info("%d 🌛 wait self geo .....", i)
+			<-time.After(3 * time.Second)
+		}
+
+		location := self.node.GetGeoLocation()
+		location.ID = myid
+
+		if Web3RpcAgentConfig != "" {
+			ast.Append(params.P_AGENT_WEB3_RPC, location)
+			am.Append(params.P_AGENT_WEB3_RPC, location)
+		}
+		if Web3WsAgentConfig != "" {
+			ast.Append(params.P_AGENT_WEB3_WS, location)
+			am.Append(params.P_AGENT_WEB3_WS, location)
+		}
+		if IpfsApiAgentConfig != "" {
+			ast.Append(params.P_AGENT_IPFS_API, location)
+			am.Append(params.P_AGENT_IPFS_API, location)
+		}
+		if IpfsGatewayAgentConfig != "" {
+			ast.Append(params.P_AGENT_IPFS_GATEWAY, location)
+			am.Append(params.P_AGENT_IPFS_GATEWAY, location)
+		}
+		if RestAgentConfig != "" {
+			ast.Append(params.P_AGENT_REST, location)
+			am.Append(params.P_AGENT_REST, location)
+		}
+		if am.AgentServerList != nil {
+			log4go.Info("Broadcast self as agent-server in new thread.")
+			go ast.KeepBroadcast(context.Background(), myid, am, params.AgentServerBroadcastInterval)
+		}
+	}()
 }
 
 func (self *AgentServerImpl) IpfsAgent(c inet.Stream, cfg types.AgentCfg) {
@@ -71,7 +116,7 @@ func (self *AgentServerImpl) RestAgent(c inet.Stream, cfg types.AgentCfg) {
 }
 
 func (self *AgentServerImpl) handAgent(c inet.Stream, cfg types.AgentCfg) {
-	_, target, timeout, _ := cfg.Open()
+	name, target, timeout, _ := cfg.Open()
 	setTimeOut := func(sc inet.Stream, tc net.Conn) error {
 		if timeout <= 0 {
 			return nil
@@ -132,7 +177,12 @@ func (self *AgentServerImpl) handAgent(c inet.Stream, cfg types.AgentCfg) {
 
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			total := 0
+			defer func() {
+				Record(name, big.NewInt(int64(total)))
+				wg.Done()
+			}()
+
 			buf := make([]byte, BufferSize)
 			for {
 				i, err := tc.Read(buf)
@@ -146,6 +196,7 @@ func (self *AgentServerImpl) handAgent(c inet.Stream, cfg types.AgentCfg) {
 					log4go.Error(err)
 					return
 				}
+				total += i
 			}
 		}()
 

@@ -40,7 +40,7 @@ func GenKey(dir string) (ic.PrivKey, error) {
 	jb, _ := json.Marshal(myid)
 	n, err := f.WriteString(string(jb))
 	fmt.Println(n, err)
-	return priv, nil
+	return priv,nil
 }
 
 func LoadKey(dir string) (ic.PrivKey, error) {

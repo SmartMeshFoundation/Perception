@@ -1,7 +1,9 @@
 package service
 
 import (
+	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
+	"time"
 
 	"bytes"
 	"context"
@@ -27,6 +29,45 @@ type Funcs struct {
 
 func NewFuncs(node types.Node) *Funcs {
 	return &Funcs{node}
+}
+
+func (self *Funcs) AsReport(requestParameter interface{}) rpcserver.Success {
+	success := rpcserver.Success{Success: true}
+	if self.node.GetAgentServer() == nil {
+		success.Success = false
+		success.Error("0", "not support")
+		return success
+	}
+	var key, start, end string
+
+	args := requestParameter.(map[string]interface{})
+	log4go.Info("input--> %v", args)
+	if v, ok := args["key"]; ok {
+		key = v.(string)
+	} else {
+		key = "ipfs" // default
+	}
+	if v, ok := args["start"]; ok {
+		start = v.(string)
+	} else {
+		start = time.Now().Format("20060102")
+	}
+	if v, ok := args["end"]; ok {
+		end = v.(string)
+	} else {
+		end = time.Now().Format("20060102")
+	}
+	log4go.Info("key=%s , start=%s , end=%s", key, start, end)
+	r, err := self.node.GetAgentServer().FetchReport(key, start, end)
+	if err != nil {
+		success.Success = false
+		success.Error("1", err.Error())
+		return success
+	}
+	success.Entity = r
+	log4go.Info("output<-- %v", success)
+	return success
+
 }
 
 func (self *Funcs) Myid(requestParameter interface{}) rpcserver.Success {
@@ -192,12 +233,20 @@ func (self *Funcs) Getastab(requestParameter interface{}) rpcserver.Success {
 		for protoID, ll := range table {
 			arr := make([]string, 0)
 			fmt.Println(protoID)
+			selfgeo := self.node.GetGeoLocation()
 			for e := ll.Front(); e != nil; e = e.Next() {
-				p := e.Value.(peer.ID)
-				//if utils.Astab.AgentServerValidator(protoID, p) {
-				//	arr = append(arr[:], p.Pretty())
-				//}
-				arr = append(arr[:], p.Pretty())
+				gl, ok := e.Value.(*types.GeoLocation)
+				if !ok {
+					ll.Remove(e)
+					continue
+				}
+				//p := e.Value.(peer.ID)
+				item := fmt.Sprintf("%s (%f,%f)", gl.ID.Pretty(), gl.Latitude, gl.Longitude)
+				if selfgeo != nil && gl.Longitude > 0 && gl.Latitude > 0 {
+					km := tookit.Distance(selfgeo.Latitude, selfgeo.Longitude, gl.Latitude, gl.Longitude)
+					item = fmt.Sprintf("%s %.2fkm", item, km)
+				}
+				arr = append(arr[:], item)
 			}
 			entity[string(protoID)] = arr
 		}
@@ -217,13 +266,16 @@ func (self *Funcs) Getastab(requestParameter interface{}) rpcserver.Success {
 			for _, as := range respmsg.AgentServerList {
 				sp := string(as.Pid)
 				arr := make([]string, 0)
-				for _, bpeer := range as.Peers {
-					peerIDD := peer.ID(bpeer)
-					//if utils.Astab.AgentServerValidator(protocol.ID(sp), peerIDD) {
-					//	arr = append(arr[:], peerIDD.Pretty())
-					//}
+				for _, location := range as.Locations {
+					peerIDD := peer.ID(location.Peer)
 					arr = append(arr[:], peerIDD.Pretty())
 				}
+				/*
+					for _, bpeer := range as.Peers {
+						peerIDD := peer.ID(bpeer)
+						arr = append(arr[:], peerIDD.Pretty())
+					}
+				*/
 				entity[sp] = arr
 			}
 			success.Entity = entity

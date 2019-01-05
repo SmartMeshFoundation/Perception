@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
+	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -93,4 +95,27 @@ func TestA(t *testing.T) {
 	t.Log(aiV.Elem().Field(0).CanSet())
 	t.Log(aiV.Elem().Field(0).Elem().Field(1).CanSet())
 
+}
+
+func TestV(t *testing.T) {
+	s := `
+HTTP/1.1 200
+Content-Type: text/plain;charset=UTF-8
+Content-Length: 4
+Date: Fri, 21 Dec 2018 09:14:27 GMT
+
+pong
+`
+	sr := strings.Contains(s, "HTTP/1.1 200")
+
+	t.Log(sr)
+}
+
+func Test(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		r := rand.Intn(3)
+		if r == 2 {
+			t.Log(i, r)
+		}
+	}
 }

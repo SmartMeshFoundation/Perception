@@ -7,11 +7,25 @@ import (
 	"github.com/SmartMeshFoundation/Perception/params"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"os"
+	"runtime"
 )
 
-var agentClientCfg = "ipfsapi:45001,ipfsgateway:48080"
+var (
+	agentClientCfg = "ipfsapi:45001,ipfsgateway:48080,rest:48095"
+	coreNum        = 1
+)
 
 func Start(homeDir, dataDir string, port int) {
+
+	log4go.AddFilter("stdout", log4go.INFO, log4go.NewConsoleLogWriter())
+
+	if runtime.NumCPU() > 2 {
+		coreNum = runtime.NumCPU() / 2
+	}
+
+	log4go.Info("cpu core used : %d", coreNum)
+	runtime.GOMAXPROCS(coreNum)
+
 	if homeDir != params.HomeDir {
 		params.SetHomeDir(homeDir)
 	}

@@ -8,7 +8,9 @@ import (
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
+	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmNtxoGkLeqfM9bsUUe5AdybTPrAUVQmvVctzi92izto9f/go-cookiekit/collections/set"
+	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
 	"gx/ipfs/QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN/go-libp2p-protocol"
@@ -51,12 +53,50 @@ type Astable struct {
 	wg               *sync.WaitGroup
 	lk               sync.RWMutex
 	node             types.Node
-	table            map[protocol.ID]*list.List
+	table            map[protocol.ID]*list.List // list<*types.GeoLocation>
 	intrval          int
 	ignoreBroadcast  *set.Set
 	countAsTabCache  *lru.Cache
 	broadcastCache   *lru.Cache
 	asValidatorCache *lru.Cache
+	//geodbAddCh       chan peer.ID
+}
+
+/*
+from						bridge				  	to
+|							|						|
+|---1 AgentMessage_BRIDGE-->|						|
+|							|-----2 NewStream------>|
+|<--3 AgentMessage_BRIDGE---|						|
+|							|						|
+|<------------r/w---------->|<----------r/w-------->|
+|							|						|
+*/
+func (self *Astable) GenBridge(ctx context.Context, bid, tid peer.ID, pid protocol.ID) (inet.Stream, error) {
+	log4go.Info("-[ 👬 gen agent bridge 👬 ]-> (%s) --> (%s) ", bid.Pretty(), tid.Pretty())
+	am := agents_pb.NewMessage(agents_pb.AgentMessage_BRIDGE)
+	as := new(agents_pb.AgentMessage_AgentServer)
+	as.Pid = []byte(pid)
+
+	as.Locations = []*agents_pb.AgentMessage_Location{agents_pb.NewAgentLocation(tid, 0, 0)}
+	//as.Peers = [][]byte{[]byte(tid)}
+
+	am.AgentServer = as
+	stream, err := self.node.Host().NewStream(ctx, bid, params.P_CHANNEL_AGENTS)
+	if err != nil {
+		return nil, err
+	}
+	// 1
+	rm, err := self.SendMsgByStream(ctx, stream, am)
+	if err != nil {
+		return nil, err
+	}
+	// 3
+	if rm.Type == agents_pb.AgentMessage_BRIDGE {
+		log4go.Info("agent_bridge_handshack_success %s : %s -> %s", pid, bid.Pretty(), tid.Pretty())
+		return stream, nil
+	}
+	return nil, errors.New("error type")
 }
 
 // TODO loop check Astable and reset latency
@@ -161,6 +201,7 @@ func NewAstable(node types.Node) *Astable {
 		countAsTabCache:  countAsTabCache,
 		broadcastCache:   broadcastCache,
 		asValidatorCache: asValidatorCache,
+		//geodbAddCh:       make(chan peer.ID, 512),
 	}
 }
 
@@ -184,58 +225,158 @@ func (self *Astable) Start() {
 	defer self.wg.Done()
 	log4go.Info("astable start ...")
 	go self.loop()
-
+	//go self.geodbAdd()
 }
 
-func (self *Astable) Append(protoID protocol.ID, peer peer.ID) error {
+/*
+func (self *Astable) geodbAdd() {
+	ctx := context.Background()
+	for p := range self.geodbAddCh {
+		ascr := newAsValidatorRecord(params.P_AGENT_IPFS_API, p)
+		if obj, ok := self.asValidatorCache.Get(ascr.String()); ok {
+			if asr := obj.(*asValidatorRecord); !asr.Expired() && !asr.Alive() {
+				//fmt.Println("---- ignor ----> ", p.Pretty())
+				continue
+			}
+		}
+		if _, ok := tookit.Geodb.GetNode(p.Pretty()); !ok {
+			pi, err := self.node.FindPeer(ctx, p, nil)
+			if err == nil {
+				// TODO
+				ips := tookit.GetIP4AddrByMultiaddr(pi.Addrs)
+				for _, ip := range ips {
+					c, err := self.node.GetGeoipDB().City(net.ParseIP(ip))
+					if err == nil && c.Location.Longitude > 0 && c.Location.Latitude > 0 {
+						tookit.Geodb.Add(p.Pretty(), c.Location.Latitude, c.Location.Longitude)
+					}
+				}
+			} else {
+				// 删除无法找到的节点，并且拒绝再次同步这个节点
+				//same validator
+				log4go.Info(" remove peer when can not find : %s", p.Pretty())
+				self.RemoveAll(p)
+			}
+		}
+	}
+}
+*/
+
+func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) error {
 	if !AgentProtoValidator(protoID) {
-		err := fmt.Errorf("👿 agent proto not alow : %s , %v , %s", protoID, []byte(protoID), peer.Pretty())
+		err := fmt.Errorf("👿 agent proto not alow : %s , %v , %s", protoID, []byte(protoID), location.ID.Pretty())
 		log4go.Error(err)
 		return err
 	}
-	self.lk.Lock()
-	defer self.lk.Unlock()
 
-	cp := new(filterBody).Body(protoID, peer)
+	self.lk.Lock()
+	defer func() {
+		self.lk.Unlock()
+	}()
+
+	cp := new(filterBody).Body(protoID, location.ID)
 	if cp.Exists() {
-		return errors.New(fmt.Sprintf("already exists : %v , %v", protoID, peer))
+		return errors.New(fmt.Sprintf("already exists : %v , %v", protoID, location.ID))
 	}
+
 	defer cp.Insert()
 	l, ok := self.table[protoID]
 	if !ok {
 		l = list.New()
 	}
-	l.PushFront(peer)
+	l.PushFront(location)
 	self.table[protoID] = l
 	return nil
 }
 
-func (self *Astable) Fetch(protoID protocol.ID) (peer.ID, error) {
+func (self *Astable) fetchWithOutGeo(protoID protocol.ID) (peer.ID, error) {
+	log4go.Info("<<FetchAs>> fetch-without-geo 🌍")
 	l, ok := self.table[protoID]
-	log4go.Info("--> 1 protoID=%v", protoID)
+RETRY:
 	if ok && l.Len() > 0 {
-		log4go.Info("--> 2 protoID=%v, len=%d", protoID, l.Len())
 		e := l.Front()
-		as := e.Value.(peer.ID)
-		log4go.Info("--> 3 protoID=%v, len=%d, as=%v", protoID, l.Len(), as.Pretty())
-		if self.AgentServerValidator(protoID, as) {
-			defer l.MoveToBack(e)
-			return as, nil
+		as, ok := e.Value.(*types.GeoLocation)
+		if !ok {
+			l.Remove(e)
+			goto RETRY
 		}
-		return self.Fetch(protoID)
+		//as := e.Value.(peer.ID)
+		if self.AgentServerValidator(protoID, as.ID) {
+			defer l.MoveToBack(e)
+			return as.ID, nil
+		}
+		return self.fetchWithOutGeo(protoID)
 	}
 	return "", errors.New("agent-server not found")
 }
 
+func (self *Astable) fetchWithGeo(protoID protocol.ID) (peer.ID, error) {
+	log4go.Info("<<FetchAs>> fetch-with-geo 🚩️")
+	selfgeo := self.node.GetGeoLocation()
+	if selfgeo == nil {
+		return "", errors.New("self geo not found.")
+	}
+	l, ok := self.table[protoID]
+	if ok && l.Len() > 0 {
+		gll := make([]*types.GeoLocation, 0)
+		for e := l.Front(); e != nil; e = e.Next() {
+			as, ok := e.Value.(*types.GeoLocation)
+			if !ok {
+				l.Remove(e)
+				continue
+			}
+			gll = append(gll, as)
+		}
+		rll, ok := tookit.Geodb.FilterNode(selfgeo, gll)
+		if !ok {
+			return self.fetchWithOutGeo(protoID)
+		}
+		i := 0
+		if size := len(rll); size > 1 {
+			i = rand.Intn(size)
+		}
+		p := rll[i].ID
+		log4go.Info("<<FetchAs>> fetch-with-geo-success : total=%d, i=%d, target=%s", len(rll), i, p.Pretty())
+		if self.AgentServerValidator(protoID, p) {
+			return p, nil
+		}
+		return self.fetchWithGeo(protoID)
+	}
+	return "", errors.New("agent-server not found")
+}
+
+func (self *Astable) Fetch(protoID protocol.ID) (peer.ID, error) {
+	if self.node.GetGeoLocation() == nil {
+		return self.fetchWithOutGeo(protoID)
+	}
+	return self.fetchWithGeo(protoID)
+}
+
+// 这个方法只有检查 ip 坐标的地方在调用，所以被触发时一定是目标节点无效
+func (self *Astable) RemoveAll(id peer.ID) {
+	for _, p := range params.P_AGENT_ALL {
+		ascr := newAsValidatorRecord(p, id)
+		ascr.SetAlive(false)
+		self.asValidatorCache.Add(ascr.String(), ascr)
+		self.Remove(p, id)
+	}
+}
 func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
-	log4go.Info("🔪 ❌ ---> %s = %s", protoID, id.Pretty())
 	self.lk.Lock()
-	defer self.lk.Unlock()
+	defer func() {
+		tookit.Geodb.Delete(id.Pretty())
+		self.lk.Unlock()
+	}()
 	l := self.table[protoID]
+	if l == nil || l.Len() == 0 {
+		return
+	}
 	for e := l.Front(); e != nil; e = e.Next() {
-		if e.Value.(peer.ID) == id {
+		if gl, ok := e.Value.(*types.GeoLocation); ok && gl.ID == id {
 			l.Remove(e)
+			log4go.Info("🔪 ❌ ---> %s = %s", protoID, id.Pretty())
 			new(filterBody).Body(protoID, id).Remove()
+		} else if !ok {
+			l.Remove(e)
 		}
 	}
 }
@@ -255,8 +396,25 @@ func (self *Astable) loop() {
 		}
 	}
 	var (
-		prebest  peer.ID
-		precount = int32(0)
+		prebest   peer.ID
+		precount  = int32(0)
+		selfgeoFn = func(as peer.ID) {
+			if self.node.GetGeoLocation() == nil {
+				req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
+				resp, err := self.SendMsg(context.Background(), as, req)
+				log4go.Info("<<selfgeoFn>> my_location_response : %v , %v", err, resp)
+				if err != nil {
+					log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
+					return
+				}
+				if resp.Location.Latitude == 0 {
+					log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
+					return
+				}
+				gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+				self.node.SetGeoLocation(gl)
+			}
+		}
 	)
 	// first fetch in peers
 	doloop := func() {
@@ -269,6 +427,7 @@ func (self *Astable) loop() {
 			st            = 50
 			conns         = self.node.Host().Network().Conns()
 		)
+
 		if len(conns) < st {
 			for i := 0; i < len(conns); i++ {
 				sendTask.Insert(i)
@@ -279,6 +438,7 @@ func (self *Astable) loop() {
 			}
 		}
 
+		// 在邻居列表里寻找 as
 		for i, conn := range conns {
 			p := conn.RemotePeer()
 			cp := new(filterBody).Body("conns", p)
@@ -290,7 +450,16 @@ func (self *Astable) loop() {
 					switch pid {
 					case params.P_AGENT_REST, params.P_AGENT_WEB3_RPC, params.P_AGENT_WEB3_WS, params.P_AGENT_IPFS_API, params.P_AGENT_IPFS_GATEWAY:
 						log4go.Warn("pid=>%s , peer=>%s", proto, p.Pretty())
-						self.Append(pid, p)
+
+						ctx := context.Background()
+						req := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
+						resp, err := self.SendMsg(ctx, p, req)
+						if err == nil && resp.Location.Latitude > 0 && resp.Location.Longitude > 0 {
+							gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+							gl.ID = p
+							selfgeoFn(p)
+							self.Append(pid, gl)
+						}
 					default:
 					}
 				}
@@ -329,6 +498,7 @@ func (self *Astable) loop() {
 		wg.Wait()
 		log4go.Debug("📣 Agent : COUNT_AS_TAB : total_conns = %d , total_send = %d", len(conns), totalSendTask)
 
+		// 周期到邻居节点去获取 astab , 只去 best 节点获取
 		go func() {
 			if count > 0 {
 				if best.Pretty() == prebest.Pretty() && count <= precount {
@@ -344,17 +514,11 @@ func (self *Astable) loop() {
 				for _, as := range respmsg.AgentServerList {
 					pid := protocol.ID(as.Pid)
 					if !AgentProtoValidator(protocol.ID(pid)) {
-						showErrPeers := func(bs [][]byte) {
-							for _, b := range bs {
-								fmt.Println("->", peer.ID(b).Pretty())
-							}
-						}
 						log4go.Warn("⚠️ skip bad agent proto %v", as.Pid)
-						showErrPeers(as.Peers)
 						continue
 					}
-					for _, p := range as.Peers {
-						id := peer.ID(p)
+					for _, location := range as.Locations {
+						id := peer.ID(location.Peer)
 						asvr := newAsValidatorRecord(pid, id)
 						obj, ok := self.asValidatorCache.Get(asvr.String())
 						if ok {
@@ -364,8 +528,27 @@ func (self *Astable) loop() {
 								continue
 							}
 						}
-						self.Append(pid, id)
+						tookit.Geodb.Add(id.Pretty(), float64(location.Latitude), float64(location.Longitude))
+						gl := types.NewGeoLocation(float64(location.Longitude), float64(location.Latitude))
+						gl.ID = id
+						self.Append(pid, gl)
+
 					}
+					/*
+						for _, p := range as.Peers {
+							id := peer.ID(p)
+							asvr := newAsValidatorRecord(pid, id)
+							obj, ok := self.asValidatorCache.Get(asvr.String())
+							if ok {
+								avr := obj.(*asValidatorRecord)
+								if !avr.Alive() && !avr.Expired() {
+									log4go.Warn("not allow, %s", avr.String())
+									continue
+								}
+							}
+							self.Append(pid, id)
+						}
+					*/
 				}
 			}
 		}()

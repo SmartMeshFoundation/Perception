@@ -11,3 +11,4 @@ func Registry(namespace, version string, service interface{}) {
 		Service:   service,
 	}
 }
+

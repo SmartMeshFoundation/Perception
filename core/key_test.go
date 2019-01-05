@@ -50,7 +50,7 @@ func TestFileRW(t *testing.T) {
 		}
 		for i := 0; i < 60; i++ {
 			f.WriteString(fmt.Sprintf("hello world , %d \n", i))
-			<-time.After(time.Millisecond * 100)
+			<-time.After(time.Millisecond*100)
 		}
 	}()
 

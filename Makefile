@@ -27,12 +27,12 @@ arm:
 	@echo "Linux ARM cross compilation done:"
 
 ios:
-	gomobile bind -ldflags "-w -s" -target=ios -o=build/mobile.framework github.com/SmartMeshFoundation/Perception/mobile
+	gomobile bind -ldflags "-w -s" -target=ios -o=build/mobile.framework github.com/SmartMeshFoundation/Perception/cmd/mobile
 	tar czvf build/mobile.framework.tar.gz build/mobile.framework
 	@echo "ios cross compilation done:"
 
 android:
-	gomobile bind -ldflags "-w -s" -target=android -o=build/mobile.aar github.com/SmartMeshFoundation/Perception/mobile
+	gomobile bind -ldflags "-w -s" -target=android -o=build/mobile.aar github.com/SmartMeshFoundation/Perception/cmd/mobile
 	@echo "android cross compilation done:"
 
 clean:

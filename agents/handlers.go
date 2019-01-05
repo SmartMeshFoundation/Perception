@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
+	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
+	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
+	"net"
 	"sync"
 
 	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
@@ -48,6 +51,10 @@ func (self *Astable) HandlerForMsgType(t agents_pb.AgentMessage_Type) agentsHand
 		return self.getAstab
 	case agents_pb.AgentMessage_COUNT_AS_TAB:
 		return self.countAstab
+	case agents_pb.AgentMessage_MY_LOCATION:
+		return self.myLocation
+	case agents_pb.AgentMessage_YOUR_LOCATION:
+		return self.yourLocation
 	default:
 		return nil
 	}
@@ -80,7 +87,8 @@ func (self *Astable) Bridge(ctx context.Context, sc inet.Stream, msg *agents_pb.
 		}
 		return errors.New("error_type")
 	}
-	tid := peer.ID(msg.AgentServer.Peers[0])
+	tid := peer.ID(msg.AgentServer.Locations[0].Peer)
+	//tid := peer.ID(msg.AgentServer.Peers[0])
 	pid := protocol.ID(msg.AgentServer.Pid)
 	tc, err := self.node.Host().NewStream(ctx, tid, pid)
 	log4go.Info("1 -> 2 NewStream to : %s , err = %v", tid.Pretty(), err)
@@ -155,6 +163,40 @@ func (self *Astable) Bridge(ctx context.Context, sc inet.Stream, msg *agents_pb.
 	return nil
 }
 
+// ac 在询问邻居时如果发现了 as 则通过这个协议来询问 as 的 location
+func (self *Astable) yourLocation(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
+	am := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
+	if gl := self.node.GetGeoLocation(); gl != nil {
+		am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(gl.Longitude), Latitude: float32(gl.Latitude)}
+	} else {
+		am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(0), Latitude: float32(0)}
+	}
+	return am, nil
+}
+
+// ac 收到 as 广播时，如果 ac 的 location 是空，则通过这个协议来询问 as
+func (self *Astable) myLocation(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
+	am := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
+	am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(0), Latitude: float32(0)}
+	// 因为是 id 问我的，所以 id 的 ip 一定可以 find 到
+	pi, err := self.node.FindPeer(ctx, id, nil)
+	ips := self.node.GetIP4AddrByMultiaddr(pi.Addrs)
+	for _, ip := range ips {
+		geodb := self.node.GetGeoipDB()
+		if geodb == nil {
+			log4go.Error("geodb not started ...")
+			return am, nil
+		}
+		c, err := geodb.City(net.ParseIP(ip))
+		if err == nil && c.Location.Longitude > 0 && c.Location.Latitude > 0 {
+			am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(c.Location.Longitude), Latitude: float32(c.Location.Latitude)}
+			log4go.Info("🌍 🛰️ response MY_LOCATION message : %s (%v)", id.Pretty(), am.Location)
+			return am, nil
+		}
+	}
+	return am, err
+}
+
 func (self *Astable) countAstab(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
 	msg.Count = 0
 	if len(self.table) > 0 {
@@ -167,27 +209,64 @@ func (self *Astable) countAstab(ctx context.Context, id peer.ID, msg *agents_pb.
 
 // broadcast this msg to conns and exclude this 'id', ignore if exist .
 func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
+	var (
+		fbCounter = 0
+		once      = new(sync.Once)
+	)
+
 	astab, err := agents_pb.AgentMessageToAstab(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	fbCounter := 0
 	for p, l := range astab {
 		// this moment l.Len == 1
 		if l == nil || l.Len() == 0 {
 			continue
 		}
 		e := l.Front()
-		pp := e.Value.(peer.ID)
-		fb := new(filterBody).Body(string(p), pp)
+		gl, ok := e.Value.(*types.GeoLocation)
+		if !ok {
+			l.Remove(e)
+			continue
+		}
+		fb := new(filterBody).Body(string(p), gl.ID)
 		if fb.Exists() {
 			// ignore
 			fbCounter += 1
 			continue
 		}
+
+		// TODO 应该挪到 append 中去;
+		// 收到的 as info 也许会带上坐标
+		once.Do(func() {
+			if asl := msg.Location; asl != nil {
+				log4go.Info("🌍 🛰️ %s == ( %f, %f ) ", gl.ID.Pretty(), asl.Latitude, asl.Longitude)
+				// TODO 插入 geodb
+				tookit.Geodb.Add(gl.ID.Pretty(), float64(asl.Latitude), float64(asl.Longitude))
+
+				// TODO 如果 selfgeo 是空，在这里要问去 as 问一次 selfgeo
+				if self.node.GetGeoLocation() == nil {
+					go func() {
+						req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
+						resp, err := self.SendMsg(ctx, gl.ID, req)
+						log4go.Info("my_location_response : %v , %v", err, resp)
+						if err != nil {
+							log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
+							return
+						}
+						if resp.Location.Latitude == 0 {
+							log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
+							return
+						}
+						self.node.SetGeoLocation(types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude)))
+					}()
+				}
+			}
+		})
+
 		//append to local
-		self.Append(p, pp)
+		self.Append(p, gl)
 	}
 
 	if fbCounter < len(astab) {

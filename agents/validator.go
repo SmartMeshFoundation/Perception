@@ -5,14 +5,19 @@ import (
 	"context"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/params"
+	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
 	"gx/ipfs/QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN/go-libp2p-protocol"
+	"strings"
 )
 
 var (
 	ipfsValidatorPacket = func(port int) string {
 		return fmt.Sprintf("GET /api/v0/id HTTP/1.1\r\nHost:localhost:%d\r\nUser-Agent:curl/7.54.0\r\nAccept: */*\r\n\r\n", port)
+	}
+	restValidatorPacket = func(port int) string {
+		return fmt.Sprintf("GET /vcoin/api/ping HTTP/1.1\r\nHost:localhost:%d\r\nUser-Agent:curl/7.54.0\r\nAccept: */*\r\n\r\n", port)
 	}
 )
 
@@ -61,9 +66,63 @@ func (self *Astable) AgentServerValidator(protoID protocol.ID, as peer.ID) bool 
 	}
 }
 
-//TODO rest validator
 func (self *Astable) restValidator(id peer.ID) bool {
-	return true
+	var tc inet.Stream
+	findby := make(chan peer.ID)
+	ctx := context.Background()
+	_, port, _, err := IpfsApiAgentConfig.Open()
+	if err != nil {
+		log4go.Error(err)
+		return false
+	}
+	if self.node.Host().ID() == id {
+		return false
+	}
+
+	pi, err := self.node.FindPeer(ctx, id, findby)
+	if err != nil {
+		return false
+	}
+	// 尝试直连
+	if err = self.node.Host().Connect(ctx, pi); err != nil {
+		// 尝试搭桥 这里一定有返回值
+		fy := <-findby
+		if fy == "" {
+			return false
+		}
+		bridgeId := fy.Pretty()
+		log4go.Info(" 👷‍ try_agent_brige_service : %s --> %s ", bridgeId, id)
+		tc, err = self.GenBridge(ctx, fy, id, params.P_AGENT_REST)
+	} else {
+		log4go.Info(" 🌞 normal_%s_stream : --> %s", params.P_AGENT_REST, id)
+		tc, err = self.node.Host().NewStream(ctx, id, params.P_AGENT_REST)
+	}
+
+	if err != nil {
+		log4go.Error(err)
+		return false
+	}
+	defer func() {
+		if tc != nil {
+			tc.Close()
+		}
+	}()
+	packet := restValidatorPacket(port)
+	_, err = tc.Write([]byte(packet))
+	if err != nil {
+		log4go.Error(err)
+		return false
+	}
+	buf := make([]byte, 2048)
+	t, err := tc.Read(buf)
+	vr := bytes.Contains(buf[:t], []byte("HTTP/1.1 200 OK"))
+	sr := strings.Contains(string(buf[:t]), "HTTP/1.1 200 OK")
+	fmt.Printf("rest-validator ==> \n %s \n err=%v, vr = %v , sr = %v \n", buf[:t], err, vr, sr)
+	if err != nil {
+		log4go.Error(err)
+		return false
+	}
+	return bytes.Contains(buf[:t], []byte("HTTP/1.1 200"))
 }
 
 //TODO web3 validator
@@ -103,7 +162,7 @@ func (self *Astable) ipfsValidator(id peer.ID) bool {
 		log4go.Error(err)
 		return false
 	}
-	return bytes.Contains(buf[:t], []byte("HTTP/1.1 200 OK"))
+	return bytes.Contains(buf[:t], []byte("HTTP/1.1 200"))
 }
 
 func AgentProtoValidator(protoID protocol.ID) bool {

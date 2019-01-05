@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/cc14514/go-geoip2-db"
 	"github.com/SmartMeshFoundation/Perception/core"
+	"github.com/SmartMeshFoundation/Perception/live"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/urfave/cli"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
@@ -25,7 +27,7 @@ import (
 
 var log = logger.Logger("main")
 
-var coreNum = 1
+var coreNum = 2
 
 func init() {
 	if runtime.NumCPU() > coreNum*8 {
@@ -125,7 +127,6 @@ func main() {
 }
 
 func start(ctx *cli.Context) {
-	isseed := ctx.GlobalBool("seed")
 	prv, err := core.LoadKey(params.HomeDir)
 	if err != nil {
 		os.Mkdir(params.HomeDir, 0755)
@@ -137,7 +138,15 @@ func start(ctx *cli.Context) {
 
 	Astab = agents.NewAstable(Node)
 	if AGENTSERVER != "" {
-		err := agents.SetAgentsConfig(AGENTSERVER)
+
+		// as 启动 geoipdb ac 不启动 >>>>>>>>>>
+		geoipdb, err := geoip2db.NewGeoipDbByStatik()
+		if err == nil {
+			Node.SetGeoipDB(geoipdb)
+		}
+		// as 启动 geoipdb ac 不启动 <<<<<<<<<<
+
+		err = agents.SetAgentsConfig(AGENTSERVER)
 		if err != nil {
 			log4go.Error(err)
 			return
@@ -154,19 +163,23 @@ func start(ctx *cli.Context) {
 		Node.SetAgentClient(agentClient)
 	}
 
+	c := context.Background()
 	// setup mdns
-	ds, err := discovery.NewMdnsService(context.Background(), Node.Host(), time.Second*5, discovery.ServiceTag)
+	ds, err := discovery.NewMdnsService(c, Node.Host(), time.Second*5, discovery.ServiceTag)
 	if err != nil {
 		log4go.Error("mdns error : %v", err)
 	} else {
 		Node.SetDiscovery(ds)
 	}
 
+	// TODO 实验阶段
+	Node.SetLiveServer(live.NewLiveServer(Node, params.DefaultLivePort))
+
 	log4go.Info("myid : %s", Node.Host().ID().Pretty())
 	log4go.Info("myaddrs : %v", Node.Host().Network().ListenAddresses())
 	log4go.Info("homedir: %s", params.HomeDir)
 	log4go.Info("datadir: %s", params.DataDir)
-	Node.Start(isseed)
+	Node.Start(false)
 }
 
 func AttachCmd(ctx *cli.Context) error {

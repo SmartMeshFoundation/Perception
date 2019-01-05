@@ -1,9 +1,9 @@
 package params
 
 import (
-	"sync"
 	"testing"
 	"time"
+	"sync"
 )
 
 func TestHome(t *testing.T) {

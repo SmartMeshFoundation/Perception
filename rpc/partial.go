@@ -9,13 +9,12 @@ import (
 )
 
 const (
-	//TODO port 要用参数传进来
 	apiHead = "http://localhost:45001/api/v0/cat/%s"
 	apiGet  = "http://localhost:45001/api/v0/cat/%s?offset=%d&length=%d"
 )
 
 var (
-	err     error
+	err error
 	res     []*http.Response
 	sizeMap = make(map[string]int64)
 )
@@ -35,7 +34,7 @@ func PartialHandler(w http.ResponseWriter, req *http.Request) {
 	var start, end, contentLength int64
 	if fileSize, ok := sizeMap[hash]; ok {
 		start = getRange2(contentRange)
-		end = fileSize - 1
+		end = fileSize -1
 		contentLength = fileSize - start
 		response, err = http.Get(fmt.Sprintf(apiGet, hash, start, contentLength))
 	} else {
@@ -72,7 +71,7 @@ func PartialHandler(w http.ResponseWriter, req *http.Request) {
 	//w.Header().Add("Etag", hash)
 
 	w.WriteHeader(http.StatusPartialContent)
-	buffer := make([]byte, 1024*256)
+	buffer := make([]byte, 1024 * 256)
 	for {
 		size, err := response.Body.Read(buffer)
 		if err == nil {
@@ -87,7 +86,7 @@ func PartialHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getRange2(contentRange string) int64 {
+func getRange2(contentRange string) (int64) {
 	reg := regexp.MustCompile(`bytes=([0-9]*)-([0-9]*)`)
 
 	ranges := reg.FindStringSubmatch(contentRange)

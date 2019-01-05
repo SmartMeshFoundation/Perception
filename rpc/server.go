@@ -30,6 +30,24 @@ func (self *RPCServer) Start() {
 	}
 	rs.ServeMux.HandleFunc("/getfile", self.handleHTTPGetfile)
 	rs.ServeMux.HandleFunc("/cat/", PartialHandler)
+
+	liveserver := self.node.GetLiveServer()
+	if liveserver != nil {
+		hFn := func(p string) (string, types.HttpHandlerFn) {
+			f, err := liveserver.GetControlHandler(p)
+			if err != nil {
+				panic(err)
+			}
+			return p, f
+		}
+		log4go.Info("rpc_server enable liveserver : /live/state")
+		rs.ServeMux.HandleFunc(hFn("/live/state"))
+		log4go.Info("rpc_server enable liveserver : /live/pull")
+		rs.ServeMux.HandleFunc(hFn("/live/pull"))
+		log4go.Info("rpc_server enable liveserver : /live/push")
+		rs.ServeMux.HandleFunc(hFn("/live/push"))
+	}
+
 	err := rs.StartServer()
 	if err == nil {
 		log4go.Info("RPC Service started. :%d", rs.Port)

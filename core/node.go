@@ -3,13 +3,18 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/cc14514/go-geoip2"
 	"github.com/SmartMeshFoundation/Perception/agents"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/SmartMeshFoundation/Perception/rpc"
 	"github.com/SmartMeshFoundation/Perception/rpc/service"
+	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht"
 	opts "gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht/opts"
+	"io/ioutil"
+	"net"
+
 	//ic "gx/ipfs/QmPvyPwuCgJ7pDmrKDxRtsScJgBaM5h4EpRL2qQJsmXf4n/go-libp2p-crypto"
 	circuit "gx/ipfs/QmNcNWuV38HBGYtRUi3okmfXSMEmXWwNgb82N3PzqqsHhY/go-libp2p-circuit"
 	ic "gx/ipfs/QmNiJiXwWE3kRhZrC5ej3kSjWHm337pYfhjLGSCDNKJP2s/go-libp2p-crypto"
@@ -47,6 +52,36 @@ type NodeImpl struct {
 	Discovery   discovery.Service
 	agentServer types.AgentServer
 	agentClient types.AgentClient
+	liveserver  types.LiveServer
+
+	ipdb    *geoip2.DBReader
+	selfgeo *types.GeoLocation
+}
+
+func (self *NodeImpl) SetGeoLocation(gl *types.GeoLocation) {
+	log4go.Info("🛰️ 🌍 Set self location success : %v", gl)
+	self.selfgeo = gl
+}
+
+func (self *NodeImpl) GetGeoipDB() *geoip2.DBReader {
+	return self.ipdb
+}
+
+func (self *NodeImpl) GetGeoLocation() *types.GeoLocation {
+	return self.selfgeo
+}
+
+func (self *NodeImpl) SetGeoipDB(db *geoip2.DBReader) {
+	log4go.Info("agent-server : geo_ip_db started")
+	self.ipdb = db
+}
+
+func (self *NodeImpl) SetLiveServer(ls types.LiveServer) {
+	self.liveserver = ls
+}
+
+func (self *NodeImpl) GetLiveServer() types.LiveServer {
+	return self.liveserver
 }
 
 func (self *NodeImpl) SetAgentClient(ac types.AgentClient) {
@@ -89,8 +124,8 @@ func makeSmuxTransportOption() libp2p.Option {
 		EnableKeepAlive:        true,
 		MaxStreamWindowSize:    uint32(1024 * 512), // same ipfs
 		//MaxStreamWindowSize:    uint32(1024 * 1024 * 512),
-		LogOutput: os.Stdout,
-		//LogOutput:              ioutil.Discard,
+		//LogOutput: os.Stdout,
+		LogOutput: ioutil.Discard,
 	}
 
 	if os.Getenv("YAMUX_DEBUG") != "" {
@@ -218,7 +253,7 @@ func NewNode(key ic.PrivKey, port int) *NodeImpl {
 	if err != nil {
 		panic(err)
 	}
-	node := &NodeImpl{hostObj, d, nil, nil, nil, nil}
+	node := &NodeImpl{host: hostObj, Routing: d}
 	sg := NewStreamGenerater(node)
 	node.sg = sg
 	return node
@@ -310,7 +345,6 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 					findby <- ""
 				}
 				close(stop)
-				log4go.Info("👋  👋  👋")
 				return
 			}
 		}
@@ -320,9 +354,9 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 }
 
 func (self *NodeImpl) Start(seed bool) {
-	self.setupNetworkID()
 	sh := NewStreamHandler(self)
 	self.host.SetStreamHandler(params.P_CHANNEL_PING, sh.pingHandler)
+	self.host.SetStreamHandler(params.P_CHANNEL_LIVE, sh.liveHandler)
 	self.host.SetStreamHandler(params.P_CHANNEL_FILE, sh.fileHandler)
 	self.host.SetStreamHandler(params.P_CHANNEL_BRIDGE, sh.bridgeHandler)
 	self.host.SetStreamHandler(params.P_CHANNEL_AGENTS, sh.agentsHandler)
@@ -334,6 +368,7 @@ func (self *NodeImpl) Start(seed bool) {
 		go loop_bootstrap(self)
 	}
 	if self.agentServer != nil {
+		self.setupLocation()
 		if agents.Web3RpcAgentConfig != "" {
 			self.Host().SetStreamHandler(params.P_AGENT_WEB3_RPC, sh.agentsWeb3rpcHandler)
 		}
@@ -353,10 +388,50 @@ func (self *NodeImpl) Start(seed bool) {
 	} else if self.agentClient != nil {
 		self.agentClient.Start()
 	}
+	if self.liveserver != nil {
+		self.liveserver.Start()
+	}
 }
 
-func (self *NodeImpl) setupNetworkID() {
+func (self *NodeImpl) GetIP4AddrByMultiaddr(addrs []ma.Multiaddr) []string {
+	ips := make([]string, 0)
+	for _, ma := range addrs {
+		maar := strings.Split(strings.Trim(ma.String(), " "), "/")
+		if len(maar) > 0 && (maar[0] == "ip4" || maar[1] == "ip4") {
+			switch maar[1] {
+			case "ip4":
+				ips = append(ips, maar[2])
+			default:
+				ips = append(ips, maar[1])
+			}
+		}
+	}
+	return ips
+}
 
+func (self *NodeImpl) setupLocation() {
+	if self.ipdb == nil {
+		log4go.Error("ignor setupNetwork , geoipdb not started ...")
+		return
+	}
+	go func() {
+		log4go.Info("geoipdb already started , wait for get self geo ...")
+		for {
+			mas := self.Host().Addrs()
+			ips := self.GetIP4AddrByMultiaddr(mas)
+			for _, ip := range ips {
+				c, err := self.ipdb.City(net.ParseIP(ip))
+				if err == nil && c.Location.Latitude > 0 && c.Location.Longitude > 0 {
+					self.selfgeo = types.NewGeoLocation(c.Location.Longitude, c.Location.Latitude)
+					h, _ := tookit.GeoEncode(self.selfgeo.Latitude, self.selfgeo.Longitude, params.GeoPrecision)
+					self.selfgeo.Geohash = h
+					log4go.Info("get self geo success , location : %v", *self.selfgeo)
+					return
+				}
+			}
+			<-time.After(1 * time.Second)
+		}
+	}()
 }
 func (self *NodeImpl) HandlePeerFound(p pstore.PeerInfo) {
 	ctx := context.Background()

@@ -27,9 +27,9 @@ var (
 		return fmt.Sprintf(`http://localhost:%d/api/?body={"sn":"sn-101","service":"funcs","method":"conn","params":{"addr":"%s"}}`, params.HTTPPort, addr)
 	}
 	/*
-		funcs_bootstrap_url = func() string {
-			return fmt.Sprintf(`http://localhost:%d/api/?body={"sn":"sn-102","service":"funcs","method":"bootstrap","params":{}}`,params.HTTPPort)
-		}*/
+	funcs_bootstrap_url = func() string {
+		return fmt.Sprintf(`http://localhost:%d/api/?body={"sn":"sn-102","service":"funcs","method":"bootstrap","params":{}}`,params.HTTPPort)
+	}*/
 	funcs_put_url = func(key, value string) string {
 		return fmt.Sprintf(`http://localhost:%d/api/?body={"sn":"sn-101","service":"funcs","method":"put","params":{"key":"%s","value":"%s"}}`, params.HTTPPort, key, value)
 	}
@@ -56,8 +56,8 @@ var (
 	}
 )
 
-var Funcs = map[string]func(args ...string) (interface{}, error){
-	"help": func(args ...string) (interface{}, error) {
+var Funcs = map[string]func(args ... string) (interface{}, error){
+	"help": func(args ... string) (interface{}, error) {
 		s := `
 myid		local peer.ID	
 myaddrs		listeners addrs 
@@ -74,14 +74,14 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 `
 
 		/*
-			scp <pid> <filepath>		copy <filepath> to pidNode's datadir/files for test transfer
-			relay <fromID> <toID>	generate a channel for relay
+		scp <pid> <filepath>		copy <filepath> to pidNode's datadir/files for test transfer
+		relay <fromID> <toID>	generate a channel for relay
 		*/
 
 		fmt.Println(s)
 		return nil, nil
 	},
-	"myid": func(args ...string) (interface{}, error) {
+	"myid": func(args ... string) (interface{}, error) {
 		reqest, err := http.NewRequest("GET", funcs_myid_url(), nil)
 		if err != nil {
 			log4go.Error(err)
@@ -99,7 +99,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		fmt.Println("not found .")
 		return nil, nil
 	},
-	"myaddrs": func(args ...string) (interface{}, error) {
+	"myaddrs": func(args ... string) (interface{}, error) {
 		reqest, err := http.NewRequest("GET", funcs_myaddrs_url(), nil)
 		if err != nil {
 			log4go.Error(err)
@@ -117,7 +117,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		fmt.Println("not found .")
 		return nil, nil
 	},
-	"conns": func(args ...string) (interface{}, error) {
+	"conns": func(args ... string) (interface{}, error) {
 		reqest, err := http.NewRequest("GET", funcs_conns_url(), nil)
 		if err != nil {
 			log4go.Error(err)
@@ -140,7 +140,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		fmt.Println("not found connected .")
 		return nil, nil
 	},
-	"peers": func(args ...string) (interface{}, error) {
+	"peers": func(args ... string) (interface{}, error) {
 		reqest, err := http.NewRequest("GET", funcs_peers_url(), nil)
 		if err != nil {
 			log4go.Error(err)
@@ -163,7 +163,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		fmt.Println("peer not found .")
 		return nil, nil
 	},
-	"conn": func(addrs ...string) (interface{}, error) {
+	"conn": func(addrs ... string) (interface{}, error) {
 		if len(addrs) > 0 {
 			reqest, err := http.NewRequest("GET", funcs_conn_url(addrs[0]), nil)
 			if err != nil {
@@ -184,24 +184,24 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		return nil, nil
 	},
 	/*
-		"bootstrap": func(args ... string) (interface{}, error) {
-			reqest, err := http.NewRequest("GET", funcs_bootstrap_url(), nil)
-			if err != nil {
-				log4go.Error(err)
-				return nil, err
-			}
-			response, _ := client.Do(reqest)
-			defer response.Body.Close()
-			success := rpcserver.SuccessFromReader(response.Body)
-			if success != nil && success.Success {
-				fmt.Println("bootstrap successed")
-			} else {
-				fmt.Println("bootstrap failed")
-			}
+	"bootstrap": func(args ... string) (interface{}, error) {
+		reqest, err := http.NewRequest("GET", funcs_bootstrap_url(), nil)
+		if err != nil {
+			log4go.Error(err)
 			return nil, err
-		},
+		}
+		response, _ := client.Do(reqest)
+		defer response.Body.Close()
+		success := rpcserver.SuccessFromReader(response.Body)
+		if success != nil && success.Success {
+			fmt.Println("bootstrap successed")
+		} else {
+			fmt.Println("bootstrap failed")
+		}
+		return nil, err
+	},
 	*/
-	"put": func(args ...string) (interface{}, error) {
+	"put": func(args ... string) (interface{}, error) {
 		if len(args) != 2 {
 			return nil, errors.New("fail params")
 		}
@@ -223,7 +223,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, err
 	},
-	"get": func(args ...string) (interface{}, error) {
+	"get": func(args ... string) (interface{}, error) {
 		if len(args) != 1 {
 			return nil, errors.New("fail params")
 		}
@@ -246,7 +246,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, nil
 	},
-	"bing": func(args ...string) (interface{}, error) {
+	"bing": func(args ... string) (interface{}, error) {
 		if len(args) != 2 {
 			return nil, errors.New("fail params")
 		}
@@ -269,7 +269,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, nil
 	},
-	"ping": func(args ...string) (interface{}, error) {
+	"ping": func(args ... string) (interface{}, error) {
 		if len(args) != 1 {
 			return nil, errors.New("fail params")
 		}
@@ -293,7 +293,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, nil
 	},
-	"getastab": func(args ...string) (interface{}, error) {
+	"getastab": func(args ... string) (interface{}, error) {
 		success := &rpcserver.Success{}
 		id := ""
 		if len(args) == 1 {
@@ -323,7 +323,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, nil
 	},
-	"local": func(args ...string) (interface{}, error) {
+	"local": func(args ... string) (interface{}, error) {
 		if len(args) != 1 {
 			return nil, errors.New("fail params")
 		}
@@ -346,7 +346,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		}
 		return nil, nil
 	},
-	"findpeer": func(args ...string) (interface{}, error) {
+	"findpeer": func(args ... string) (interface{}, error) {
 		if len(args) != 1 {
 			return nil, errors.New("fail params")
 		}
@@ -365,7 +365,7 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 		return nil, err
 	},
 
-	"getfile": func(args ...string) (interface{}, error) {
+	"getfile": func(args ... string) (interface{}, error) {
 		if len(args) != 3 {
 			return nil, errors.New("fail params")
 		}
@@ -385,60 +385,60 @@ getfile <id> <filepath> <output>	id is peer.ID, filepath is peer.ID's file full 
 	},
 
 	/*
-		"scp": func(args ... string) (interface{}, error) {
-			if len(args) != 2 {
-				return nil, errors.New("fail params")
-			}
-			to, fp := args[0], args[1]
-			tid, err := peer.IDB58Decode(to)
-			if err != nil {
-				return nil, err
-			}
-			s, err := node.Host().NewStream(context.Background(), tid, P_CHANNEL_FILE)
-			if err != nil {
-				return nil, err
-			}
-			buff, err := ioutil.ReadFile(fp)
-			if err != nil {
-				return nil, err
-			}
-			l := int64(len(buff))
-			lenBuff := bytes.NewBuffer([]byte{})
-			binary.Write(lenBuff, binary.BigEndian, l)
-			head := lenBuff.Bytes()
-			fmt.Println("head --> ", len(head), head)
-			s.Write(head)
-			i, err := s.Write(buff)
-			log4go.Info("wait feedback. %d", i)
-			res := make([]byte, 8)
-			if i, e := s.Read(res); e == nil {
-				total := new(big.Int).SetBytes(res[0:i])
-				log4go.Info("(%d) write byte : %d , remote recv : %d", i, l, total.Int64())
-			} else {
-				log4go.Error(e)
-			}
-			s.Close()
+	"scp": func(args ... string) (interface{}, error) {
+		if len(args) != 2 {
+			return nil, errors.New("fail params")
+		}
+		to, fp := args[0], args[1]
+		tid, err := peer.IDB58Decode(to)
+		if err != nil {
 			return nil, err
-		},
-		"relay": func(args ... string) (interface{}, error) {
-			if len(args) != 2 {
-				return nil, errors.New("fail params")
-			}
-			from, to := args[0], args[1]
-			fid, err := peer.IDB58Decode(from)
-			if err != nil {
-				return nil, err
-			}
-			tid, err := peer.IDB58Decode(to)
-			if err != nil {
-				return nil, err
-			}
-			addr, err := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s/p2p-circuit/ipfs/%s", fid.Pretty(), tid.Pretty()))
-			if err != nil {
-				log4go.Error(err)
-			}
-			node.Host().Peerstore().AddAddrs(tid, []ma.Multiaddr{addr}, pstore.TempAddrTTL)
-			return nil, nil
-		},
+		}
+		s, err := node.Host().NewStream(context.Background(), tid, P_CHANNEL_FILE)
+		if err != nil {
+			return nil, err
+		}
+		buff, err := ioutil.ReadFile(fp)
+		if err != nil {
+			return nil, err
+		}
+		l := int64(len(buff))
+		lenBuff := bytes.NewBuffer([]byte{})
+		binary.Write(lenBuff, binary.BigEndian, l)
+		head := lenBuff.Bytes()
+		fmt.Println("head --> ", len(head), head)
+		s.Write(head)
+		i, err := s.Write(buff)
+		log4go.Info("wait feedback. %d", i)
+		res := make([]byte, 8)
+		if i, e := s.Read(res); e == nil {
+			total := new(big.Int).SetBytes(res[0:i])
+			log4go.Info("(%d) write byte : %d , remote recv : %d", i, l, total.Int64())
+		} else {
+			log4go.Error(e)
+		}
+		s.Close()
+		return nil, err
+	},
+	"relay": func(args ... string) (interface{}, error) {
+		if len(args) != 2 {
+			return nil, errors.New("fail params")
+		}
+		from, to := args[0], args[1]
+		fid, err := peer.IDB58Decode(from)
+		if err != nil {
+			return nil, err
+		}
+		tid, err := peer.IDB58Decode(to)
+		if err != nil {
+			return nil, err
+		}
+		addr, err := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s/p2p-circuit/ipfs/%s", fid.Pretty(), tid.Pretty()))
+		if err != nil {
+			log4go.Error(err)
+		}
+		node.Host().Peerstore().AddAddrs(tid, []ma.Multiaddr{addr}, pstore.TempAddrTTL)
+		return nil, nil
+	},
 	*/
 }

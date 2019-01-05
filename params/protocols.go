@@ -6,15 +6,27 @@ import (
 
 const (
 	// protocols
-	P_CHANNEL_FILE       = protocol.ID("/channel/file")
-	P_CHANNEL_PING       = protocol.ID("/channel/ping")
-	P_CHANNEL_BRIDGE     = protocol.ID("/channel/bridge")
-	P_CHANNEL_AGENTS     = protocol.ID("/channel/agents")
+	P_CHANNEL_LIVE   = protocol.ID("/channel/live")
+	P_CHANNEL_FILE   = protocol.ID("/channel/file")
+	P_CHANNEL_PING   = protocol.ID("/channel/ping")
+	P_CHANNEL_BRIDGE = protocol.ID("/channel/bridge")
+	P_CHANNEL_AGENTS = protocol.ID("/channel/agents")
+
 	P_AGENT_WEB3_RPC     = protocol.ID("/agent/web3rpc")
 	P_AGENT_WEB3_WS      = protocol.ID("/agent/web3ws")
 	P_AGENT_IPFS_API     = protocol.ID("/agent/ipfsapi")
 	P_AGENT_IPFS_GATEWAY = protocol.ID("/agent/ipfsgateway")
 	P_AGENT_REST         = protocol.ID("/agent/rest")
+)
+
+var (
+	P_AGENT_ALL = []protocol.ID{
+		P_AGENT_WEB3_RPC,
+		P_AGENT_WEB3_WS,
+		P_AGENT_IPFS_API,
+		P_AGENT_IPFS_GATEWAY,
+		P_AGENT_REST,
+	}
 )
 
 const (

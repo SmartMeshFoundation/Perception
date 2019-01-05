@@ -352,6 +352,26 @@ func (self *StreamHandler) pingHandler(s inet.Stream) {
 	s.Close()
 }
 
+func (self *StreamHandler) liveHandler(s inet.Stream) {
+	buf := make([]byte, 4)
+	if i, e := s.Read(buf); e != nil {
+		log4go.Error(e)
+		s.Write([]byte(PANG))
+		return
+	} else if i != 4 || PING != string(buf) {
+		log4go.Error("error : %d , %s", i, string(buf))
+		s.Write([]byte(PANG))
+		return
+	}
+	log4go.Info("%s from %s", string(buf), s.Conn().RemotePeer().Pretty())
+	t, err := s.Write([]byte(PONG))
+	if err != nil {
+		log4go.Error("error : %v", err)
+	}
+	log4go.Info("pong %d", t)
+	s.Close()
+}
+
 //			 |<-------------------------- head(41) ---------------------------->|
 //response = |<- status(1) ->|<- size(8)->|<- file_md5(16) ->|<- part_md5(16) ->|<- file ->|
 func (self *StreamHandler) fileHandler(s inet.Stream) {

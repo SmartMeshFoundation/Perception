@@ -1,8 +1,10 @@
 {
   "author": "liangc",
-  "bugs": {},
+  "bugs": {
+    "url": "https://github.com/SmartMeshFoundation/Perception/issues"
+  },
   "gx": {
-    "dvcsimport": "github.com/SmartMeshFoundation/Perception"
+    "dvcsimport": "https://github.com/SmartMeshFoundation/Perception"
   },
   "gxDependencies": [
     {
@@ -121,13 +123,19 @@
       "hash": "QmNcNWuV38HBGYtRUi3okmfXSMEmXWwNgb82N3PzqqsHhY",
       "name": "go-libp2p-circuit",
       "version": "2.3.7"
-    }
+    },
+    {
+      "author": "liangc",
+      "hash": "QmaotkvehotV6Yvn8roarKxN96v6cnGmdKrHn3PW6BkiiV",
+      "name": "go-geoip2-db",
+      "version": "0.0.1"
+    },
   ],
   "gxVersion": "0.12.1",
   "language": "go",
   "license": "",
   "name": "Perception",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.0.1"
+  "version": "0.0.2"
 }
 

@@ -10,12 +10,24 @@ message AgentMessage {
 		GET_AS_TAB = 2;
 		COUNT_AS_TAB = 3;
 		BRIDGE = 4;
+		MY_LOCATION = 5;
+		YOUR_LOCATION = 6;
 	}
+
+    message Location {
+        float longitude = 1;
+        float latitude = 2;
+        bytes peer = 3;
+    }
 
 	message AgentServer {
 	    // protocol id
 		bytes pid = 1;
-		repeated bytes peers = 2;
+		// 兼容
+		// 新的协议中每个 as 都带有坐标，所以这里要做兼容处理
+		// repeated bytes peers = 2;
+		// 新协议中的属性, 取代 peers 属性
+		repeated Location locations = 3;
 	}
 
 	// defines what type of message it is.
@@ -26,4 +38,6 @@ message AgentMessage {
 	repeated AgentServer agentServerList = 3;
 
     int32 count = 4;
+
+    Location location = 5;
 }

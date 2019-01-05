@@ -2,9 +2,7 @@ package agents
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
@@ -122,6 +120,7 @@ from						bridge				  	to
 |<------------r/w---------->|<----------r/w-------->|
 |							|						|
 */
+/*
 func (self *AgentClientImpl) GenBridge(ctx context.Context, bid, tid peer.ID, pid protocol.ID) (inet.Stream, error) {
 	log4go.Info("-[ 👬 gen agent bridge 👬 ]-> (%s) --> (%s) ", bid.Pretty(), tid.Pretty())
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_BRIDGE)
@@ -145,6 +144,7 @@ func (self *AgentClientImpl) GenBridge(ctx context.Context, bid, tid peer.ID, pi
 	}
 	return nil, errors.New("error type")
 }
+*/
 
 func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 	findby := make(chan peer.ID)
@@ -167,11 +167,13 @@ func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 	}
 	tout := timeout.(int)
 	log4go.Info("-> timeout=%d", tout)
-	target, err := self.table.Fetch(p)
 
-	log4go.Info("-> target=%v , err=%v", target.Pretty(), err)
 	// TODO 70 client 固定通道测试
+	target, err := self.table.Fetch(p)
+	log4go.Info("-> target=%v , err=%v", target.Pretty(), err)
 	// target, err = peer.IDB58Decode("QmNNC87W9kWhn4UZBKMGr9APpk4KDN1ERC5YJqvwX1QxwK")
+	//target, err := peer.IDB58Decode("QmXu6Cu5CpqBfCV9Pw9jQN8obwV3nUCVuvfaXhtRpomZGp")
+	//log4go.Info("set_test_target --> %s", target.Pretty())
 	if err != nil {
 		sc.Write([]byte(err.Error()))
 		return
@@ -192,7 +194,7 @@ func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 		}
 		bridgeId := fy.Pretty()
 		log4go.Info(" 👷‍ try_agent_brige_service : %s --> %s ", bridgeId, target)
-		tc, err = self.GenBridge(ctx, fy, target, p)
+		tc, err = self.table.GenBridge(ctx, fy, target, p)
 	} else {
 		log4go.Info(" 🌞 normal_%s_stream : --> %s", p, target)
 		tc, err = self.node.Host().NewStream(ctx, target, p)
