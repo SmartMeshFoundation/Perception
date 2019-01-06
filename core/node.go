@@ -423,7 +423,7 @@ func (self *NodeImpl) setupLocation() {
 				c, err := self.ipdb.City(net.ParseIP(ip))
 				// empty city name is private ip addr
 				if len(c.City.Names) == 0 {
-					c.Location.Longitude, c.Location.Latitude = -200, -200
+					c.Location.Longitude, c.Location.Latitude = -203, -203
 				}
 				if err == nil && tookit.VerifyLocation(c.Location.Latitude, c.Location.Longitude) {
 					self.selfgeo = types.NewGeoLocation(c.Location.Longitude, c.Location.Latitude)

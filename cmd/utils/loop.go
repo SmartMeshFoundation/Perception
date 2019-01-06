@@ -48,8 +48,11 @@ func handler(aa params.AsyncAction, node types.Node) {
 							continue
 						}
 						targetID := as.ID
-						log4go.Info("do_handler : sent_my_localtion_message --> %s", targetID)
-						Astab.QuerySelfLocation(targetID)
+						err := Astab.QuerySelfLocation(targetID)
+						log4go.Info("do_handler : sent_my_localtion_message --> %s, err=%v", targetID, err)
+						if err == nil {
+							return
+						}
 					}
 				}
 			}

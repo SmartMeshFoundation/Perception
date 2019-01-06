@@ -388,23 +388,24 @@ func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 	}
 }
 
-func (self *Astable) QuerySelfLocation(target peer.ID) {
+func (self *Astable) QuerySelfLocation(target peer.ID) error {
 	if self.node.GetGeoLocation() == nil {
 		req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
 		resp, err := self.SendMsg(context.Background(), target, req)
-		log4go.Info("<<selfgeoFn>> my_location_response : %v , %v", err, resp)
+		log4go.Info("<<QuerySelfLocation>> my_location_response : %v , %v", err, resp)
 		if err != nil {
 			log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
-			return
+			return err
 		}
 		if !tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 			log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
-			return
+			return errors.New("get_my_location_fail")
 		}
 		gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 		gl.ID = self.node.Host().ID()
 		self.node.SetGeoLocation(gl)
 	}
+	return nil
 }
 
 func (self *Astable) loop() {
@@ -483,8 +484,9 @@ func (self *Astable) loop() {
 						if err == nil && tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 							gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 							gl.ID = p
-							self.QuerySelfLocation(p)
-							self.Append(pid, gl)
+							if self.QuerySelfLocation(p) == nil {
+								self.Append(pid, gl)
+							}
 						}
 					default:
 					}

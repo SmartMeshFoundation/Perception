@@ -169,18 +169,18 @@ func (self *Astable) yourLocation(ctx context.Context, id peer.ID, msg *agents_p
 	if gl := self.node.GetGeoLocation(); gl != nil {
 		am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(gl.Longitude), Latitude: float32(gl.Latitude)}
 	} else {
-		am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(-200), Latitude: float32(-200)}
+		am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(-202), Latitude: float32(-202)}
 	}
 	return am, nil
 }
 
-// ac 收到 as 广播时，如果 ac 的 location 是空，则通过这个协议来询问 as
+// ac/as 收到 as 广播时，如果 ac/as 的 location 是空，则通过这个协议来询问 as
 func (self *Astable) myLocation(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
 	am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(-200), Latitude: float32(-200)}
-	// 因为是 id 问我的，所以 id 的 ip 一定可以 find 到
-	pi, err := self.node.FindPeer(ctx, id, nil)
+	pi := self.node.Host().Peerstore().PeerInfo(id)
 	ips := self.node.GetIP4AddrByMultiaddr(pi.Addrs)
+
 	for _, ip := range ips {
 		geodb := self.node.GetGeoipDB()
 		if geodb == nil {
@@ -189,8 +189,9 @@ func (self *Astable) myLocation(ctx context.Context, id peer.ID, msg *agents_pb.
 		}
 		c, err := geodb.City(net.ParseIP(ip))
 		// empty city name is private ip addr
-		if len(c.City.Names) == 0 {
-			c.Location.Longitude, c.Location.Latitude = -200, -200
+		log4go.Info("--> %s : %s, %v", id.Pretty(), ip, c)
+		if len(c.Country.Names) == 0 {
+			c.Location.Longitude, c.Location.Latitude = -201, -201
 		}
 		if err == nil && tookit.VerifyLocation(c.Location.Latitude, c.Location.Longitude) {
 			am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(c.Location.Longitude), Latitude: float32(c.Location.Latitude)}
@@ -198,7 +199,7 @@ func (self *Astable) myLocation(ctx context.Context, id peer.ID, msg *agents_pb.
 			return am, nil
 		}
 	}
-	return am, err
+	return am, nil
 }
 
 func (self *Astable) countAstab(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
