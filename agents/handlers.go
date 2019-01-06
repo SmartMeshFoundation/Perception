@@ -259,7 +259,7 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 							log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
 							return
 						}
-						if tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
+						if !tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 							log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
 							return
 						}

@@ -397,7 +397,7 @@ func (self *Astable) QuerySelfLocation(target peer.ID) {
 			log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
 			return
 		}
-		if tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
+		if !tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 			log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
 			return
 		}

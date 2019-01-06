@@ -43,6 +43,10 @@ func handler(aa params.AsyncAction, node types.Node) {
 							l.Remove(e)
 							continue
 						}
+						if as.ID == node.Host().ID() {
+							log4go.Info("do_handler_skip_self : sent_my_localtion_message")
+							continue
+						}
 						targetID := as.ID
 						log4go.Info("do_handler : sent_my_localtion_message --> %s", targetID)
 						Astab.QuerySelfLocation(targetID)
