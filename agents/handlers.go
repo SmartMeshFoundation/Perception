@@ -188,6 +188,10 @@ func (self *Astable) myLocation(ctx context.Context, id peer.ID, msg *agents_pb.
 			return am, nil
 		}
 		c, err := geodb.City(net.ParseIP(ip))
+		// empty city name is private ip addr
+		if len(c.City.Names) == 0 {
+			c.Location.Longitude, c.Location.Latitude = -200, -200
+		}
 		if err == nil && tookit.VerifyLocation(c.Location.Latitude, c.Location.Longitude) {
 			am.Location = &agents_pb.AgentMessage_Location{Longitude: float32(c.Location.Longitude), Latitude: float32(c.Location.Latitude)}
 			log4go.Info("🌍 🛰️ response MY_LOCATION message : %s (%v)", id.Pretty(), am.Location)

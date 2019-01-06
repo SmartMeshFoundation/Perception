@@ -421,6 +421,10 @@ func (self *NodeImpl) setupLocation() {
 			ips := self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
 				c, err := self.ipdb.City(net.ParseIP(ip))
+				// empty city name is private ip addr
+				if len(c.City.Names) == 0 {
+					c.Location.Longitude, c.Location.Latitude = -200, -200
+				}
 				if err == nil && tookit.VerifyLocation(c.Location.Latitude, c.Location.Longitude) {
 					self.selfgeo = types.NewGeoLocation(c.Location.Longitude, c.Location.Latitude)
 					h, _ := tookit.GeoEncode(self.selfgeo.Latitude, self.selfgeo.Longitude, params.GeoPrecision)
