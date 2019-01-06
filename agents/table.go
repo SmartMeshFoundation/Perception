@@ -262,6 +262,13 @@ func (self *Astable) geodbAdd() {
 */
 
 func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) error {
+
+	if !AgentLocationValidator(location) {
+		err := fmt.Errorf("👿 agent location empty : %s , %v , %s", protoID, []byte(protoID), location.ID.Pretty())
+		log4go.Error(err)
+		return err
+	}
+
 	if !AgentProtoValidator(protoID) {
 		err := fmt.Errorf("👿 agent proto not alow : %s , %v , %s", protoID, []byte(protoID), location.ID.Pretty())
 		log4go.Error(err)
@@ -381,6 +388,24 @@ func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 	}
 }
 
+func (self *Astable) QuerySelfLocation(target peer.ID) {
+	if self.node.GetGeoLocation() == nil {
+		req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
+		resp, err := self.SendMsg(context.Background(), target, req)
+		log4go.Info("<<selfgeoFn>> my_location_response : %v , %v", err, resp)
+		if err != nil {
+			log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
+			return
+		}
+		if resp.Location.Latitude == 0 {
+			log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
+			return
+		}
+		gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+		self.node.SetGeoLocation(gl)
+	}
+}
+
 func (self *Astable) loop() {
 	timer := time.NewTimer(time.Second * time.Duration(self.intrval))
 	resetIntrval := func(t *time.Timer, ast *Astable) {
@@ -396,25 +421,25 @@ func (self *Astable) loop() {
 		}
 	}
 	var (
-		prebest   peer.ID
-		precount  = int32(0)
-		selfgeoFn = func(as peer.ID) {
-			if self.node.GetGeoLocation() == nil {
-				req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
-				resp, err := self.SendMsg(context.Background(), as, req)
-				log4go.Info("<<selfgeoFn>> my_location_response : %v , %v", err, resp)
-				if err != nil {
-					log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
-					return
+		prebest  peer.ID
+		precount = int32(0)
+		/*		selfgeoFn = func(as peer.ID) {
+				if self.node.GetGeoLocation() == nil {
+					req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
+					resp, err := self.SendMsg(context.Background(), as, req)
+					log4go.Info("<<selfgeoFn>> my_location_response : %v , %v", err, resp)
+					if err != nil {
+						log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
+						return
+					}
+					if resp.Location.Latitude == 0 {
+						log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
+						return
+					}
+					gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+					self.node.SetGeoLocation(gl)
 				}
-				if resp.Location.Latitude == 0 {
-					log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
-					return
-				}
-				gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
-				self.node.SetGeoLocation(gl)
-			}
-		}
+			}*/
 	)
 	// first fetch in peers
 	doloop := func() {
@@ -457,7 +482,7 @@ func (self *Astable) loop() {
 						if err == nil && resp.Location.Latitude > 0 && resp.Location.Longitude > 0 {
 							gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 							gl.ID = p
-							selfgeoFn(p)
+							self.QuerySelfLocation(p)
 							self.Append(pid, gl)
 						}
 					default:

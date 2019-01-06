@@ -60,7 +60,12 @@ func (self *AgentServerImpl) Start() {
 	// flush agent-server table
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_ADD_AS_TAB)
 	go func() {
-		for i := 0; i < 20; i++ {
+		location := types.NewGeoLocation(0, 0)
+		location.ID = myid
+		// 30 秒内得不到 geolocation 就证明我本地的 ip 可能是 nat 分配的，无法直接获取
+		// 这需要后续问其他 as 询问了, 询问完成之前没必要广播自己的信息
+		i := 0
+		for ; i < 30; i++ {
 			if selfgeo := self.node.GetGeoLocation(); selfgeo != nil {
 				am.Location = &agents_pb.AgentMessage_Location{
 					Longitude: float32(selfgeo.Longitude),
@@ -70,11 +75,11 @@ func (self *AgentServerImpl) Start() {
 				break
 			}
 			log4go.Info("%d 🌛 wait self geo .....", i)
-			<-time.After(3 * time.Second)
+			<-time.After(5 * time.Second)
 		}
-
-		location := self.node.GetGeoLocation()
-		location.ID = myid
+		if i < 10 {
+			location = self.node.GetGeoLocation()
+		}
 
 		if Web3RpcAgentConfig != "" {
 			ast.Append(params.P_AGENT_WEB3_RPC, location)

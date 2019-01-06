@@ -38,9 +38,9 @@ var (
 	GeoPrecision = 4
 
 	NetworkID = "492133e95f196e8915a5c8b5f7a70777cea31606b0e20ff2e31f8dbceec83706"
-	HomeDir  = defaultHomeDir()
-	DataDir  = fmt.Sprintf("%s/data", HomeDir)
-	HTTPPort = DefaultHTTPPort
+	HomeDir   = defaultHomeDir()
+	DataDir   = fmt.Sprintf("%s/data", HomeDir)
+	HTTPPort  = DefaultHTTPPort
 )
 
 func defaultHomeDir() string {

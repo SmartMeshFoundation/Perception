@@ -163,7 +163,7 @@ func (self *Astable) Bridge(ctx context.Context, sc inet.Stream, msg *agents_pb.
 	return nil
 }
 
-// ac 在询问邻居时如果发现了 as 则通过这个协议来询问 as 的 location
+// ac 在询问邻居时如果发现了 as 时可通过这个协议来询问 as 的 location
 func (self *Astable) yourLocation(ctx context.Context, id peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
 	if gl := self.node.GetGeoLocation(); gl != nil {

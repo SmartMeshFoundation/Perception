@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
@@ -163,6 +164,14 @@ func (self *Astable) ipfsValidator(id peer.ID) bool {
 		return false
 	}
 	return bytes.Contains(buf[:t], []byte("HTTP/1.1 200"))
+}
+
+func AgentLocationValidator(location *types.GeoLocation) bool {
+	return true
+	/*	if location.Latitude > 0 && location.Longitude > 0 {
+			return true
+		}
+		return false*/
 }
 
 func AgentProtoValidator(protoID protocol.ID) bool {

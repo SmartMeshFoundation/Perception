@@ -3,13 +3,13 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/cc14514/go-geoip2"
 	"github.com/SmartMeshFoundation/Perception/agents"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/SmartMeshFoundation/Perception/rpc"
 	"github.com/SmartMeshFoundation/Perception/rpc/service"
 	"github.com/SmartMeshFoundation/Perception/tookit"
+	"github.com/cc14514/go-geoip2"
 	"gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht"
 	opts "gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht/opts"
 	"io/ioutil"
@@ -416,7 +416,7 @@ func (self *NodeImpl) setupLocation() {
 	}
 	go func() {
 		log4go.Info("geoipdb already started , wait for get self geo ...")
-		for {
+		for i := 0; i < 180; i++ {
 			mas := self.Host().Addrs()
 			ips := self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
@@ -430,6 +430,17 @@ func (self *NodeImpl) setupLocation() {
 				}
 			}
 			<-time.After(1 * time.Second)
+		}
+		// 如果10秒没拿到，也许是本机没有直接公网ip，需要问邻居节点要一个了
+		log4go.Warn("public ip not found")
+		for {
+			log4go.Warn("try ask astab by async action.")
+			params.AACh <- params.AA_GET_LOCATION
+			<-time.After(3 * time.Second)
+			if self.selfgeo != nil && self.selfgeo.Longitude > 0 && self.selfgeo.Latitude > 0 {
+				log4go.Info("query self geo success , location : %v", *self.selfgeo)
+				return
+			}
 		}
 	}()
 }

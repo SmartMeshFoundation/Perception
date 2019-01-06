@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/cc14514/go-geoip2-db"
 	"github.com/SmartMeshFoundation/Perception/core"
 	"github.com/SmartMeshFoundation/Perception/live"
 	"github.com/SmartMeshFoundation/Perception/params"
+	"github.com/cc14514/go-geoip2-db"
 	"github.com/urfave/cli"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	logger "gx/ipfs/QmRREK2CAZ5Re2Bd9zZFG6FeYDppUWt5cMgsoUEp3ktgSr/go-log"
@@ -180,6 +180,7 @@ func start(ctx *cli.Context) {
 	log4go.Info("homedir: %s", params.HomeDir)
 	log4go.Info("datadir: %s", params.DataDir)
 	Node.Start(false)
+	AsyncActionLoop(c, Node)
 }
 
 func AttachCmd(ctx *cli.Context) error {
