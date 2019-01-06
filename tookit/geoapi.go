@@ -36,20 +36,20 @@ func (self *Box) Height() float64 {
 }
 
 func VerifyLocation(latitude, longitude interface{}) bool {
-	if lat32, ok := latitude.(float32); ok && float64(lat32) < MIN_LATITUDE || float64(lat32) > MAX_LATITUDE {
-		return false
+	if lat32, ok := latitude.(float32); ok && float64(lat32) >= MIN_LATITUDE && float64(lat32) <= MAX_LATITUDE {
+		return true
 	}
-	if lng32, ok := longitude.(float32); ok && float64(lng32) < MIN_LONGITUDE || float64(lng32) > MAX_LONGITUDE {
-		return false
+	if lng32, ok := longitude.(float32); ok && float64(lng32) >= MIN_LONGITUDE && float64(lng32) <= MAX_LONGITUDE {
+		return true
 	}
 
-	if lat, ok := latitude.(float64); ok && lat < MIN_LATITUDE || lat > MAX_LATITUDE {
-		return false
+	if lat, ok := latitude.(float64); ok && lat >= MIN_LATITUDE && lat <= MAX_LATITUDE {
+		return true
 	}
-	if lng, ok := longitude.(float64); ok && lng < MIN_LONGITUDE || lng > MAX_LONGITUDE {
-		return false
+	if lng, ok := longitude.(float64); ok && lng >= MIN_LONGITUDE && lng <= MAX_LONGITUDE {
+		return true
 	}
-	return true
+	return false
 }
 
 func GeoEncode(latitude, longitude float64, precision int) (string, *Box) {

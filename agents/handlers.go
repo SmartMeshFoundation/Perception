@@ -223,7 +223,8 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 	if err != nil {
 		return nil, err
 	}
-
+	//TODO 这里有个死循环，为什么？
+	log4go.Info("👿 👿 👿 <<handler_addAstab>> astab_size = %d , from = %s", len(astab), fromPeer.Pretty())
 	for p, l := range astab {
 		// this moment l.Len == 1
 		if l == nil || l.Len() == 0 {
@@ -234,6 +235,11 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 		if !ok {
 			l.Remove(e)
 			continue
+		}
+		// 自己发出去的广播，再传播就是死循环
+		if gl.ID == self.node.Host().ID() {
+			log4go.Warn("🚥 🤚 🚥 refuse receive : died loop : msg.id=%s , myid=%s ", gl.ID.Pretty(), self.node.Host().ID().Pretty())
+			break
 		}
 		fb := new(filterBody).Body(string(p), gl.ID)
 		if fb.Exists() {
@@ -271,6 +277,7 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 		})
 
 		//append to local
+		log4go.Info("addAstab -> astab.Append : %s : %s , %d", p, gl.ID.Pretty(), len(astab))
 		self.Append(p, gl)
 	}
 
@@ -307,10 +314,25 @@ func (self *Astable) KeepBroadcast(ctx context.Context, from peer.ID, msg *agent
 func (self *Astable) Broadcast(ctx context.Context, from peer.ID, msg *agents_pb.AgentMessage, duplication bool) {
 	self.wg.Wait()
 	var (
-		conns = self.node.Host().Network().Conns()
-		total = 0
-		skip  = 0
+		conns  = self.node.Host().Network().Conns()
+		total  = 0
+		skip   = 0
+		source peer.ID
 	)
+	// 获取消息源头 >>>>>
+	astabMsg, err := agents_pb.AgentMessageToAstab(msg)
+	if err != nil {
+		log4go.Error(err)
+		return
+	}
+	for _, v := range astabMsg {
+		e := v.Front()
+		gl := e.Value.(*types.GeoLocation)
+		source = gl.ID
+		break
+	}
+	// 获取消息源头 <<<<<
+
 	for _, conn := range conns {
 		rp := conn.RemotePeer()
 		br := newBroadcastRecord(rp, msg.GetType())
@@ -326,16 +348,18 @@ func (self *Astable) Broadcast(ctx context.Context, from peer.ID, msg *agents_pb
 			}
 		}
 
-		if rp != from && !self.isIgnoreBroadcast(rp) {
+		// 不能发给消息发送人，也不能发给消息源
+
+		if rp != source && rp != from && !self.isIgnoreBroadcast(rp) {
 			total++
 			defer self.broadcastCache.Add(br.String(), br)
 			go func(p peer.ID) {
-				_, err := self.SendMsg(ctx, p, msg)
-				if err != nil {
-					self.appendIgnoreBroadcast(p)
-					return
-				}
+				self.SendMsg(ctx, p, msg)
+				self.appendIgnoreBroadcast(p)
+				return
 			}(rp)
+		} else {
+			log4go.Info("-> 🚥 skip_broadcast -> rp=%s, src=%s, from=%s", rp.Pretty(), source.Pretty(), from.Pretty())
 		}
 	}
 	log4go.Info(">> 📢 broadcast %v : total_conns = %d , total_send = %d , skip_duplication = %d", msg.GetType(), len(conns), total, skip)

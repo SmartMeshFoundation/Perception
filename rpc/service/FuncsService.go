@@ -250,10 +250,10 @@ func (self *Funcs) Getastab(requestParameter interface{}) rpcserver.Success {
 					continue
 				}
 				//p := e.Value.(peer.ID)
-				item := fmt.Sprintf("%s (%f,%f)", gl.ID.Pretty(), gl.Latitude, gl.Longitude)
+				item := fmt.Sprintf("%s", gl.ID.Pretty())
 				if selfgeo != nil && tookit.VerifyLocation(gl.Latitude, gl.Longitude) {
 					km := tookit.Distance(selfgeo.Latitude, selfgeo.Longitude, gl.Latitude, gl.Longitude)
-					item = fmt.Sprintf("%s %.2fkm", item, km)
+					item = fmt.Sprintf("%s (%f,%f) %.2fkm", item, gl.Latitude, gl.Longitude, km)
 				}
 				arr = append(arr[:], item)
 			}

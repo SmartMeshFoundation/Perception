@@ -286,16 +286,28 @@ func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) er
 	}
 
 	if tookit.VerifyLocation(location.Latitude, location.Longitude) {
+		fmt.Println("zzzzzzzzz", location.ID.Pretty(), location.Longitude, location.Latitude)
 		defer cp.Insert()
 	} else {
 		//加入待处理任务，等待重置
+		fmt.Println("xxxxxxxxx", location.ID.Pretty(), location.Longitude, location.Latitude)
 		params.AACh <- params.NewAA(params.AA_GET_AS_LOCATION, location.ID)
 	}
 
 	l, ok := self.table[protoID]
 	if !ok {
 		l = list.New()
+	} else {
+		// 去掉重复的
+		for e := l.Front(); e != nil; e = e.Next() {
+			as, ok := e.Value.(*types.GeoLocation)
+			if !ok || as.ID == location.ID {
+				l.Remove(e)
+				continue
+			}
+		}
 	}
+
 	l.PushFront(location)
 	self.table[protoID] = l
 	return nil
@@ -396,6 +408,7 @@ func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 }
 
 func (self *Astable) Reset(id peer.ID, location *types.GeoLocation) {
+	log4go.Info("🏯 --->", id.Pretty(), location)
 	self.lk.Lock()
 	defer func() {
 		tookit.Geodb.Add(id.Pretty(), location.Latitude, location.Longitude)
@@ -412,6 +425,7 @@ func (self *Astable) Reset(id peer.ID, location *types.GeoLocation) {
 				log4go.Info("👌 ---> reset_geo : %s , %s , [ %v -> %v ] ", protoID, id.Pretty(), gl, location)
 				gl.Latitude = location.Latitude
 				gl.Longitude = location.Longitude
+				break
 			} else if !ok {
 				l.Remove(e)
 			}
@@ -516,6 +530,7 @@ func (self *Astable) loop() {
 							gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 							gl.ID = p
 							if self.QuerySelfLocation(p) == nil {
+								log4go.Info("conns -> astab.Append : %s", gl.ID.Pretty())
 								self.Append(pid, gl)
 							}
 						}
@@ -590,6 +605,7 @@ func (self *Astable) loop() {
 						tookit.Geodb.Add(id.Pretty(), float64(location.Latitude), float64(location.Longitude))
 						gl := types.NewGeoLocation(float64(location.Longitude), float64(location.Latitude))
 						gl.ID = id
+						log4go.Info("best -> astab.Append : %s", gl.ID.Pretty())
 						self.Append(pid, gl)
 
 					}
