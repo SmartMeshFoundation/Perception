@@ -397,7 +397,7 @@ func (self *Astable) QuerySelfLocation(target peer.ID) {
 			log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
 			return
 		}
-		if resp.Location.Latitude == 0 {
+		if tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 			log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
 			return
 		}
@@ -480,7 +480,7 @@ func (self *Astable) loop() {
 						ctx := context.Background()
 						req := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
 						resp, err := self.SendMsg(ctx, p, req)
-						if err == nil && resp.Location.Latitude > 0 && resp.Location.Longitude > 0 {
+						if err == nil && tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 							gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 							gl.ID = p
 							self.QuerySelfLocation(p)

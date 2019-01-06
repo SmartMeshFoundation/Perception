@@ -421,7 +421,7 @@ func (self *NodeImpl) setupLocation() {
 			ips := self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
 				c, err := self.ipdb.City(net.ParseIP(ip))
-				if err == nil && c.Location.Latitude > 0 && c.Location.Longitude > 0 {
+				if err == nil && tookit.VerifyLocation(c.Location.Latitude, c.Location.Longitude) {
 					self.selfgeo = types.NewGeoLocation(c.Location.Longitude, c.Location.Latitude)
 					h, _ := tookit.GeoEncode(self.selfgeo.Latitude, self.selfgeo.Longitude, params.GeoPrecision)
 					self.selfgeo.Geohash = h
@@ -437,7 +437,7 @@ func (self *NodeImpl) setupLocation() {
 			log4go.Warn("try ask astab by async action.")
 			params.AACh <- params.AA_GET_LOCATION
 			<-time.After(3 * time.Second)
-			if self.selfgeo != nil && self.selfgeo.Longitude > 0 && self.selfgeo.Latitude > 0 {
+			if self.selfgeo != nil && tookit.VerifyLocation(self.selfgeo.Latitude, self.selfgeo.Longitude) {
 				log4go.Info("query self geo success , location : %v", *self.selfgeo)
 				return
 			}
