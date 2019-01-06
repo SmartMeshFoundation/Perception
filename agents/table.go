@@ -402,6 +402,7 @@ func (self *Astable) QuerySelfLocation(target peer.ID) {
 			return
 		}
 		gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+		gl.ID = self.node.Host().ID()
 		self.node.SetGeoLocation(gl)
 	}
 }

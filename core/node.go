@@ -416,7 +416,7 @@ func (self *NodeImpl) setupLocation() {
 	}
 	go func() {
 		log4go.Info("geoipdb already started , wait for get self geo ...")
-		for i := 0; i < 180; i++ {
+		for i := 0; i < 5; i++ {
 			mas := self.Host().Addrs()
 			ips := self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
