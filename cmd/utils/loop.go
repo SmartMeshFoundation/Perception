@@ -2,10 +2,14 @@ package utils
 
 import (
 	"context"
+	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
+	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
+	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -23,9 +27,28 @@ func AsyncActionLoop(ctx context.Context, node types.Node) {
 	}
 }
 
-func handler(aa params.AsyncAction, node types.Node) {
-	switch aa {
-	case params.AA_GET_LOCATION:
+func handler(aa *params.AA, node types.Node) {
+	switch aa.Action {
+	case params.AA_GET_AS_LOCATION:
+		p, ok := aa.Payload.(peer.ID)
+		if !ok {
+			return
+		}
+		log4go.Info("<<AA_GET_AS_LOCATION>> accept = %s", p.Pretty())
+		ctx := context.Background()
+		for i := 1; i < 5; i++ {
+			<-time.After(time.Second * 2 * time.Duration(i))
+			req := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
+			resp, err := Astab.SendMsg(ctx, p, req)
+			log4go.Info("<<AA_GET_AS_LOCATION>> result = %d , %v , %v", i, err, resp)
+			if err == nil && tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
+				gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
+				gl.ID = p
+				Astab.Reset(p, gl)
+				return
+			}
+		}
+	case params.AA_GET_MY_LOCATION:
 		if atomic.LoadInt32(&aa_get_location) == 1 {
 			log4go.Warn("refuse : already_handler_get_location_action.")
 			return

@@ -32,11 +32,6 @@ func NewAgentServer(astab *Astable) *AgentServerImpl {
 
 func (self *AgentServerImpl) SetupReport(cfg types.AgentCfg) error {
 	n, _, _, err := cfg.Open()
-	fmt.Println("YYYYY", n, err)
-	fmt.Println("YYYYY", n, err)
-	fmt.Println("YYYYY", n, err)
-	fmt.Println("YYYYY", n, err)
-	fmt.Println("YYYYY", n, err)
 	if err != nil {
 		return err
 	}
@@ -60,7 +55,7 @@ func (self *AgentServerImpl) Start() {
 	// flush agent-server table
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_ADD_AS_TAB)
 	go func() {
-		location := types.NewGeoLocation(0, 0)
+		location := types.NewGeoLocation(-206, -206)
 		location.ID = myid
 		// 30 秒内得不到 geolocation 就证明我本地的 ip 可能是 nat 分配的，无法直接获取
 		// 这需要后续问其他 as 询问了, 询问完成之前没必要广播自己的信息

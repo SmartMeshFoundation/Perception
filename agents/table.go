@@ -78,7 +78,7 @@ func (self *Astable) GenBridge(ctx context.Context, bid, tid peer.ID, pid protoc
 	as := new(agents_pb.AgentMessage_AgentServer)
 	as.Pid = []byte(pid)
 
-	as.Locations = []*agents_pb.AgentMessage_Location{agents_pb.NewAgentLocation(tid, 0, 0)}
+	as.Locations = []*agents_pb.AgentMessage_Location{agents_pb.NewAgentLocation(tid, -205, -205)}
 	//as.Peers = [][]byte{[]byte(tid)}
 
 	am.AgentServer = as
@@ -285,7 +285,13 @@ func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) er
 		return errors.New(fmt.Sprintf("already exists : %v , %v", protoID, location.ID))
 	}
 
-	defer cp.Insert()
+	if tookit.VerifyLocation(location.Latitude, location.Longitude) {
+		defer cp.Insert()
+	} else {
+		//加入待处理任务，等待重置
+		params.AACh <- params.NewAA(params.AA_GET_AS_LOCATION, location.ID)
+	}
+
 	l, ok := self.table[protoID]
 	if !ok {
 		l = list.New()
@@ -367,6 +373,7 @@ func (self *Astable) RemoveAll(id peer.ID) {
 		self.Remove(p, id)
 	}
 }
+
 func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 	self.lk.Lock()
 	defer func() {
@@ -384,6 +391,30 @@ func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 			new(filterBody).Body(protoID, id).Remove()
 		} else if !ok {
 			l.Remove(e)
+		}
+	}
+}
+
+func (self *Astable) Reset(id peer.ID, location *types.GeoLocation) {
+	self.lk.Lock()
+	defer func() {
+		tookit.Geodb.Add(id.Pretty(), location.Latitude, location.Longitude)
+		self.lk.Unlock()
+	}()
+
+	for _, protoID := range params.P_AGENT_ALL {
+		l := self.table[protoID]
+		if l == nil || l.Len() == 0 {
+			continue
+		}
+		for e := l.Front(); e != nil; e = e.Next() {
+			if gl, ok := e.Value.(*types.GeoLocation); ok && gl.ID == id {
+				log4go.Info("👌 ---> reset_geo : %s , %s , [ %v -> %v ] ", protoID, id.Pretty(), gl, location)
+				gl.Latitude = location.Latitude
+				gl.Longitude = location.Longitude
+			} else if !ok {
+				l.Remove(e)
+			}
 		}
 	}
 }

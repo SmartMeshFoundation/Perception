@@ -439,7 +439,7 @@ func (self *NodeImpl) setupLocation() {
 		log4go.Warn("public ip not found")
 		for {
 			log4go.Warn("try ask astab by async action.")
-			params.AACh <- params.AA_GET_LOCATION
+			params.AACh <- params.NewAA(params.AA_GET_MY_LOCATION, nil)
 			<-time.After(3 * time.Second)
 			if self.selfgeo != nil && tookit.VerifyLocation(self.selfgeo.Latitude, self.selfgeo.Longitude) {
 				log4go.Info("query self geo success , location : %v", *self.selfgeo)
