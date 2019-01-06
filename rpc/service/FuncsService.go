@@ -71,7 +71,16 @@ func (self *Funcs) AsReport(requestParameter interface{}) rpcserver.Success {
 }
 
 func (self *Funcs) Myid(requestParameter interface{}) rpcserver.Success {
-
+	if gl := self.node.GetGeoLocation(); gl != nil {
+		return rpcserver.Success{
+			Success: true,
+			Entity: struct {
+				Id                  string
+				Vsn                 string
+				Longitude, Latitude float64
+			}{gl.ID.Pretty(), params.VERSION, gl.Longitude, gl.Latitude},
+		}
+	}
 	return rpcserver.Success{
 		Success: true,
 		Entity: struct {

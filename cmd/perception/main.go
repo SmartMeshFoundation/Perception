@@ -180,7 +180,7 @@ func start(ctx *cli.Context) {
 	log4go.Info("homedir: %s", params.HomeDir)
 	log4go.Info("datadir: %s", params.DataDir)
 	Node.Start(false)
-	AsyncActionLoop(c, Node)
+	go AsyncActionLoop(c, Node)
 }
 
 func AttachCmd(ctx *cli.Context) error {
