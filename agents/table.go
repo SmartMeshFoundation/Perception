@@ -286,11 +286,9 @@ func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) er
 	}
 
 	if tookit.VerifyLocation(location.Latitude, location.Longitude) {
-		fmt.Println("zzzzzzzzz", location.ID.Pretty(), location.Longitude, location.Latitude)
 		defer cp.Insert()
 	} else {
 		//加入待处理任务，等待重置
-		fmt.Println("xxxxxxxxx", location.ID.Pretty(), location.Longitude, location.Latitude)
 		params.AACh <- params.NewAA(params.AA_GET_AS_LOCATION, location.ID)
 	}
 

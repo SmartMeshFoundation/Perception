@@ -223,8 +223,7 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 	if err != nil {
 		return nil, err
 	}
-	//TODO 这里有个死循环，为什么？
-	log4go.Info("👿 👿 👿 <<handler_addAstab>> astab_size = %d , from = %s", len(astab), fromPeer.Pretty())
+	log4go.Info("<<handler_addAstab>> astab_size = %d , from = %s", len(astab), fromPeer.Pretty())
 	for p, l := range astab {
 		// this moment l.Len == 1
 		if l == nil || l.Len() == 0 {
@@ -238,7 +237,7 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 		}
 		// 自己发出去的广播，再传播就是死循环
 		if gl.ID == self.node.Host().ID() {
-			log4go.Warn("🚥 🤚 🚥 refuse receive : died loop : msg.id=%s , myid=%s ", gl.ID.Pretty(), self.node.Host().ID().Pretty())
+			log4go.Warn("🤚 refuse receive : died loop : msg.id=%s , myid=%s ", gl.ID.Pretty(), self.node.Host().ID().Pretty())
 			break
 		}
 		fb := new(filterBody).Body(string(p), gl.ID)
