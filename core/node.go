@@ -416,9 +416,10 @@ func (self *NodeImpl) setupLocation() {
 	}
 	go func() {
 		log4go.Info("geoipdb already started , wait for get self geo ...")
+		var ips []string
 		for i := 0; i < 5; i++ {
 			mas := self.Host().Addrs()
-			ips := self.GetIP4AddrByMultiaddr(mas)
+			ips = self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
 				c, err := self.ipdb.City(net.ParseIP(ip))
 				// empty city name is private ip addr
@@ -433,10 +434,10 @@ func (self *NodeImpl) setupLocation() {
 					return
 				}
 			}
-			<-time.After(1 * time.Second)
+			<-time.After(2 * time.Second)
 		}
 		// 如果10秒没拿到，也许是本机没有直接公网ip，需要问邻居节点要一个了
-		log4go.Warn("public ip not found")
+		log4go.Warn("public ip not found", ips)
 		for {
 			log4go.Warn("try ask astab by async action.")
 			params.AACh <- params.NewAA(params.AA_GET_MY_LOCATION, nil)

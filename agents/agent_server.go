@@ -50,30 +50,29 @@ func (self *AgentServerImpl) FetchReport(k, startDate, endDate string) (map[stri
 }
 
 func (self *AgentServerImpl) Start() {
+	log4go.Info("AgentServer_ready_for_start.")
 	ast := self.table
+	// 要等 astable.Start 成功了之后
+	ast.wg.Wait()
+	log4go.Info("AgentServer_start_successed.")
+
 	myid := self.node.Host().ID()
 	// flush agent-server table
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_ADD_AS_TAB)
 	go func() {
 		location := types.NewGeoLocation(-206, -206)
 		location.ID = myid
-		// 30 秒内得不到 geolocation 就证明我本地的 ip 可能是 nat 分配的，无法直接获取
-		// 这需要后续问其他 as 询问了, 询问完成之前没必要广播自己的信息
-		i := 0
-		for ; i < 3; i++ {
-			if selfgeo := self.node.GetGeoLocation(); selfgeo != nil {
-				am.Location = &agents_pb.AgentMessage_Location{
-					Longitude: float32(selfgeo.Longitude),
-					Latitude:  float32(selfgeo.Latitude),
-				}
-				log4go.Info("🛰️ Broadcast AS info take Location : %v", selfgeo)
-				break
+		// 如果没有 geo 这需要后续问其他 as 询问了, 询问完成之前没必要广播自己的信息
+		if selfgeo := self.node.GetGeoLocation(); selfgeo != nil {
+			am.Location = &agents_pb.AgentMessage_Location{
+				Longitude: float32(selfgeo.Longitude),
+				Latitude:  float32(selfgeo.Latitude),
+				Peer:      []byte(myid),
 			}
-			log4go.Info("%d 🌛 wait self geo .....", i)
-			<-time.After(3 * time.Second)
-		}
-		if i < 3 {
+			log4go.Info("🛰️ Broadcast_AS_info_take_Location : %v", selfgeo)
 			location = self.node.GetGeoLocation()
+		} else {
+			log4go.Info("🛰️ ❌ : %v", selfgeo)
 		}
 
 		if Web3RpcAgentConfig != "" {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
-	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/SmartMeshFoundation/Perception/tookit"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
@@ -206,38 +205,49 @@ func (self *Astable) countAstab(ctx context.Context, id peer.ID, msg *agents_pb.
 	msg.Count = 0
 	if len(self.table) > 0 {
 		for _, l := range self.table {
-			msg.Count += int32(l.Len())
+			msg.Count += int32(len(l))
 		}
 	}
 	return msg, nil
 }
 
+// TODO 重灾区，广播风暴
+// TODO 重灾区，广播风暴
+// TODO 重灾区，广播风暴
+// TODO 重灾区，广播风暴
 // broadcast this msg to conns and exclude this 'id', ignore if exist .
 func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents_pb.AgentMessage) (*agents_pb.AgentMessage, error) {
 	var (
 		fbCounter = 0
-		once      = new(sync.Once)
 	)
 
 	astab, err := agents_pb.AgentMessageToAstab(msg)
 	if err != nil {
 		return nil, err
 	}
-	log4go.Info("<<handler_addAstab>> astab_size = %d , from = %s", len(astab), fromPeer.Pretty())
+	//log4go.Info("<<addAstab>> astab_size = %d , from = %s", len(astab), fromPeer)
+
+	// 应该挪到 append 中去;
+	// 收到的 as info 也许会带上坐标
+	if asl := msg.Location; asl != nil && asl.Peer != nil {
+		id := peer.ID(asl.Peer)
+		log4go.Info("🌍 🛰️ %s == ( %f, %f ) ", id, asl.Latitude, asl.Longitude)
+		tookit.Geodb.Add(id.Pretty(), float64(asl.Latitude), float64(asl.Longitude))
+	}
+
 	for p, l := range astab {
 		// this moment l.Len == 1
-		if l == nil || l.Len() == 0 {
+		if l == nil || len(l) == 0 {
 			continue
 		}
-		e := l.Front()
-		gl, ok := e.Value.(*types.GeoLocation)
-		if !ok {
-			l.Remove(e)
+		gl := l[0]
+		if gl.ID == "" {
+			//log4go.Error("astab_gl_id_nil = %v", gl)
 			continue
 		}
 		// 自己发出去的广播，再传播就是死循环
 		if gl.ID == self.node.Host().ID() {
-			log4go.Warn("🤚 refuse receive : died loop : msg.id=%s , myid=%s ", gl.ID.Pretty(), self.node.Host().ID().Pretty())
+			//log4go.Warn("🤚 refuse receive : died loop : msg.id=%s , myid=%s ", gl.ID.Pretty(), self.node.Host().ID().Pretty())
 			break
 		}
 		fb := new(filterBody).Body(string(p), gl.ID)
@@ -246,42 +256,25 @@ func (self *Astable) addAstab(ctx context.Context, fromPeer peer.ID, msg *agents
 			fbCounter += 1
 			continue
 		}
-
-		// TODO 应该挪到 append 中去;
-		// 收到的 as info 也许会带上坐标
-		once.Do(func() {
-			if asl := msg.Location; asl != nil {
-				log4go.Info("🌍 🛰️ %s == ( %f, %f ) ", gl.ID.Pretty(), asl.Latitude, asl.Longitude)
-				// TODO 插入 geodb
-				tookit.Geodb.Add(gl.ID.Pretty(), float64(asl.Latitude), float64(asl.Longitude))
-
-				// TODO 如果 selfgeo 是空，在这里要问去 as 问一次 selfgeo
-				if self.node.GetGeoLocation() == nil {
-					go func() {
-						req := agents_pb.NewMessage(agents_pb.AgentMessage_MY_LOCATION)
-						resp, err := self.SendMsg(ctx, gl.ID, req)
-						log4go.Info("my_location_response : %v , %v", err, resp)
-						if err != nil {
-							log4go.Error("🛰️ 🌍 get_my_location error : %v", err)
-							return
-						}
-						if !tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
-							log4go.Error("🛰️ 🌍 get_my_location fail : %v", resp.Location)
-							return
-						}
-						self.node.SetGeoLocation(types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude)))
-					}()
-				}
-			}
-		})
+		if l0, ok := tookit.Geodb.GetNode(gl.ID.Pretty()); ok && tookit.VerifyLocation(l0.Latitude, l0.Longitude) {
+			// ignore
+			fbCounter += 1
+			continue
+		}
 
 		//append to local
-		log4go.Info("addAstab -> astab.Append : %s : %s , %d", p, gl.ID.Pretty(), len(astab))
+		log4go.Info("addAstab -> astab.Append : %s -> , %s : %s , %d", fromPeer, p, gl.ID, len(astab))
 		self.Append(p, gl)
+
+		// TODO 如果 selfgeo 是空，在这里要问去 as 问一次 selfgeo
+		if self.node.GetGeoLocation() == nil {
+			params.AACh <- params.NewAA(params.AA_GET_MY_LOCATION, nil)
+		}
+
 	}
 
 	if fbCounter < len(astab) {
-		log4go.Info("📢 broadcast msg from -> %s", fromPeer.Pretty())
+
 		self.Broadcast(ctx, fromPeer, msg, true)
 	}
 
@@ -318,23 +311,30 @@ func (self *Astable) Broadcast(ctx context.Context, from peer.ID, msg *agents_pb
 		skip   = 0
 		source peer.ID
 	)
+
 	// 获取消息源头 >>>>>
 	astabMsg, err := agents_pb.AgentMessageToAstab(msg)
 	if err != nil {
 		log4go.Error(err)
 		return
 	}
-	for _, v := range astabMsg {
-		e := v.Front()
-		gl := e.Value.(*types.GeoLocation)
-		source = gl.ID
-		break
+	for _, l := range astabMsg {
+		if len(l) > 0 {
+			gl := l[0]
+			source = gl.ID
+			break
+		}
+	}
+	if source == "" {
+		//log4go.Error("-> skip_source_nil : from=%v ", from)
+		return
 	}
 	// 获取消息源头 <<<<<
 
 	for _, conn := range conns {
-		rp := conn.RemotePeer()
-		br := newBroadcastRecord(rp, msg.GetType())
+		remotePeer := conn.RemotePeer()
+		br := newBroadcastRecord(remotePeer, msg.GetType())
+
 		history, ok := self.broadcastCache.Get(br.String())
 		if !duplication && ok {
 			// skip duplication by lru cache
@@ -343,22 +343,19 @@ func (self *Astable) Broadcast(ctx context.Context, from peer.ID, msg *agents_pb
 				self.broadcastCache.Remove(br.String())
 			} else {
 				skip++
+				//log4go.Info("-> skip_broadcast -> rp=%s, src=%s, from=%s", remotePeer, source, from)
 				continue
 			}
 		}
 
 		// 不能发给消息发送人，也不能发给消息源
-
-		if rp != source && rp != from && !self.isIgnoreBroadcast(rp) {
+		if remotePeer != source && remotePeer != from {
+			self.broadcastCache.Add(br.String(), br)
 			total++
-			defer self.broadcastCache.Add(br.String(), br)
-			go func(p peer.ID) {
-				self.SendMsg(ctx, p, msg)
-				self.appendIgnoreBroadcast(p)
-				return
-			}(rp)
+			self.broadcastCh <- BroadcastMsg{remotePeer, msg}
+			log4go.Debug("📢 broadcast msg from -> %s", remotePeer)
 		} else {
-			log4go.Info("-> 🚥 skip_broadcast -> rp=%s, src=%s, from=%s", rp.Pretty(), source.Pretty(), from.Pretty())
+			log4go.Info("-> 🚥 skip_broadcast -> remotePeer,source,from = %s,%s,%s ", remotePeer, source, from)
 		}
 	}
 	log4go.Info(">> 📢 broadcast %v : total_conns = %d , total_send = %d , skip_duplication = %d", msg.GetType(), len(conns), total, skip)
@@ -374,8 +371,13 @@ func (self *Astable) SendMsgByStream(ctx context.Context, nstr inet.Stream, msg 
 			return nil, err
 		}
 		r := ggio.NewDelimitedReader(nstr, inet.MessageSizeMax)
-		//w := newBufferedDelimitedWriter(nstr)
+		if r == nil {
+			return nil, errors.New("ggio_reader_nil")
+		}
 		w := ggio.NewDelimitedWriter(nstr)
+		if w == nil {
+			return nil, errors.New("ggio_writer_nil")
+		}
 
 		err = w.WriteMsg(msg)
 		if err != nil {

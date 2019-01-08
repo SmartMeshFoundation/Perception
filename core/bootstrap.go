@@ -50,7 +50,7 @@ func bootstrap(wg *sync.WaitGroup, node *NodeImpl) {
 			wg.Add(1)
 			go func() {
 				ctx := context.Background()
-				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+				ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 				defer func() {
 					wg.Done()
 					cancel()

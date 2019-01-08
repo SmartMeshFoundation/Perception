@@ -33,21 +33,21 @@ func handler(aa *params.AA, node types.Node) {
 	switch aa.Action {
 	case params.AA_GET_AS_LOCATION:
 		p, ok := aa.Payload.(peer.ID)
-		if node.Host().ID() == p {
-			log4go.Info("<<AA_GET_AS_LOCATION>> skip_self = %v", aa.Payload)
+		if !ok {
 			return
 		}
-		if !ok {
+		if node.Host().ID() == p {
+			log4go.Warn("<<AA_GET_AS_LOCATION>> skip_self = %v", aa.Payload)
 			return
 		}
 		_, duplicate := aa_get_as_location.LoadOrStore(p, 0)
 		if duplicate {
-			log4go.Info("<<AA_GET_AS_LOCATION>> skip_duplicate = %v", aa.Payload)
+			log4go.Warn("<<AA_GET_AS_LOCATION>> skip_duplicate = %v", aa.Payload)
 			return
 		}
 		log4go.Info("<<AA_GET_AS_LOCATION>> accept = %v", aa.Payload)
 		ctx := context.Background()
-		for i := 1; i < 5; i++ {
+		for i := 1; i < 3; i++ {
 			<-time.After(time.Second * 2 * time.Duration(i))
 			req := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
 			resp, err := Astab.SendMsg(ctx, p, req)
@@ -56,7 +56,7 @@ func handler(aa *params.AA, node types.Node) {
 				defer aa_get_as_location.Delete(p)
 				gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
 				gl.ID = p
-				Astab.Reset(p, gl)
+				Astab.Reset(gl)
 				return
 			}
 		}
@@ -68,18 +68,25 @@ func handler(aa *params.AA, node types.Node) {
 		atomic.StoreInt32(&aa_get_my_location, 1)
 		defer atomic.StoreInt32(&aa_get_my_location, 0)
 		log4go.Info("loop_handler_get_location_action")
-		if astab := Astab.GetTable(); astab != nil {
-			for p, l := range astab {
-				log4go.Info("do_handler : %s --> %d", p, l.Len())
-				if l.Len() > 0 {
-					for e := l.Front(); e != nil; e = e.Next() {
-						as, ok := e.Value.(*types.GeoLocation)
-						if !ok {
-							l.Remove(e)
-							continue
-						}
+		for p, _ := range astabToPeerMap(node.Host().ID()) {
+			err := Astab.QuerySelfLocation(p)
+			log4go.Info("do_handler : sent_my_localtion_message --> %s, err=%v", p, err)
+			if err == nil {
+				return
+			}
+		}
+		/*
+			if astab := Astab.GetTable(); astab != nil {
+				for p, l := range astab {
+					log4go.Info("do_handler : %s --> %d", p, len(l))
+					for i := len(l); i >= 0; i-- {
+						as := l[i]
 						if as.ID == node.Host().ID() {
 							log4go.Info("do_handler_skip_self : sent_my_localtion_message")
+							continue
+						}
+						if as.ID == "" {
+							log4go.Info("do_handler_skip_nil : sent_my_localtion_message")
 							continue
 						}
 						targetID := as.ID
@@ -91,6 +98,26 @@ func handler(aa *params.AA, node types.Node) {
 					}
 				}
 			}
+		*/
+	}
+}
+
+func astabToPeerMap(selfid peer.ID) map[peer.ID]struct{} {
+	r := make(map[peer.ID]struct{})
+	if astab := Astab.GetTable(); astab != nil {
+		for _, l := range astab {
+			for _, as := range l {
+				if as.ID == selfid {
+					log4go.Info("do_handler_skip_self : astabToPeerMap")
+					continue
+				}
+				if as.ID == "" {
+					log4go.Info("do_handler_skip_nil : astabToPeerMap")
+					continue
+				}
+				r[as.ID] = struct{}{}
+			}
 		}
 	}
+	return r
 }

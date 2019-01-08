@@ -1,7 +1,6 @@
 package agents_pb
 
 import (
-	"container/list"
 	"errors"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
@@ -29,7 +28,7 @@ func (self *AgentMessage) Append(protoID protocol.ID, location *types.GeoLocatio
 	return self
 }
 
-func AstabToAgentMessage(table map[protocol.ID]*list.List) (*AgentMessage, error) {
+func AstabToAgentMessage(table map[protocol.ID][]*types.GeoLocation) (*AgentMessage, error) {
 	if table == nil || len(table) < 1 {
 		return nil, errors.New("empty astable")
 	}
@@ -39,43 +38,27 @@ func AstabToAgentMessage(table map[protocol.ID]*list.List) (*AgentMessage, error
 	for p, l := range table {
 		as := new(AgentMessage_AgentServer)
 		as.Pid = []byte(p)
-		if l == nil || l.Len() == 0 {
+		if l == nil || len(l) == 0 {
 			continue
 		}
-		as.Locations = make([]*AgentMessage_Location, l.Len())
-		j := 0
-		for e := l.Front(); e != nil; e = e.Next() {
-			g, ok := e.Value.(*types.GeoLocation)
-			if !ok {
-				l.Remove(e)
-				continue
-			}
+		as.Locations = make([]*AgentMessage_Location, len(l))
+		for j, g := range l {
 			as.Locations[j] = NewAgentLocation(g.ID, g.Latitude, g.Longitude)
-			j += 1
 		}
-
-		/*
-			as.Peers = make([][]byte, l.Len())
-			for e := l.Front(); e != nil; e = e.Next() {
-				pp := e.Value.(peer.ID)
-				as.Peers[j] = []byte(pp)
-				j += 1
-			}
-		*/
 		msg.AgentServerList[i] = as
 		i += 1
 	}
 	return msg, nil
 }
 
-func AgentMessageToAstab(msg *AgentMessage) (map[protocol.ID]*list.List, error) {
-	fn := func() (map[protocol.ID]*list.List, error) {
-		astab := make(map[protocol.ID]*list.List)
+func AgentMessageToAstab(msg *AgentMessage) (map[protocol.ID][]*types.GeoLocation, error) {
+	fn := func() (map[protocol.ID][]*types.GeoLocation, error) {
+		astab := make(map[protocol.ID][]*types.GeoLocation)
 		for _, as := range msg.AgentServerList {
 			pid := protocol.ID(as.Pid)
 			l, ok := astab[pid]
 			if !ok {
-				l = list.New()
+				l = make([]*types.GeoLocation, 0)
 			}
 
 			if len(as.Locations) > 0 {
@@ -83,7 +66,7 @@ func AgentMessageToAstab(msg *AgentMessage) (map[protocol.ID]*list.List, error) 
 					peer := peer.ID(location.Peer)
 					g := types.NewGeoLocation(float64(location.Longitude), float64(location.Latitude))
 					g.ID = peer
-					l.PushFront(g)
+					l = append(l, g)
 				}
 				astab[pid] = l
 			}

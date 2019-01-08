@@ -243,12 +243,7 @@ func (self *Funcs) Getastab(requestParameter interface{}) rpcserver.Success {
 			arr := make([]string, 0)
 			fmt.Println(protoID)
 			selfgeo := self.node.GetGeoLocation()
-			for e := ll.Front(); e != nil; e = e.Next() {
-				gl, ok := e.Value.(*types.GeoLocation)
-				if !ok {
-					ll.Remove(e)
-					continue
-				}
+			for _, gl := range ll {
 				//p := e.Value.(peer.ID)
 				item := fmt.Sprintf("%s", gl.ID.Pretty())
 				if selfgeo != nil && tookit.VerifyLocation(gl.Latitude, gl.Longitude) {

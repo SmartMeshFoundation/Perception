@@ -1,15 +1,16 @@
 package tookit
 
 import (
-	"fmt"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
+	"sync"
 )
 
 type GeoDB struct {
 	precision      int
 	allNodes       map[string]*types.GeoLocation
 	geohashMapkeys map[string]map[string]bool
+	lock           *sync.RWMutex
 }
 
 func NewGeoDB() *GeoDB {
@@ -17,20 +18,10 @@ func NewGeoDB() *GeoDB {
 		precision:      3,
 		allNodes:       make(map[string]*types.GeoLocation),
 		geohashMapkeys: make(map[string]map[string]bool),
+		lock:           new(sync.RWMutex),
 	}
 }
 
-func (self *GeoDB) PrintAllNodes() {
-	fmt.Println("====================================")
-	fmt.Println(" GeoDB AllNodes >>>>")
-	fmt.Println("====================================")
-	for k, v := range self.allNodes {
-		fmt.Println(k, v)
-	}
-	fmt.Println("====================================")
-	fmt.Println(" GeoDB AllNodes <<<<")
-	fmt.Println("====================================")
-}
 func (self *GeoDB) GetPrecision() int {
 	return self.precision
 }
@@ -57,7 +48,7 @@ func (self *GeoDB) GetAllNodes() map[string]*types.GeoLocation {
 }
 
 // 增加key的坐标节点
-func (self *GeoDB) AddLocation(key string, location *types.GeoLocation) {
+func (self *GeoDB) addLocation(key string, location *types.GeoLocation) {
 	self.allNodes[key] = location
 
 	if self.geohashMapkeys[location.Geohash] == nil {
@@ -65,20 +56,26 @@ func (self *GeoDB) AddLocation(key string, location *types.GeoLocation) {
 	}
 	self.geohashMapkeys[location.Geohash][key] = true
 }
+func (self *GeoDB) AddLocation(key string, location *types.GeoLocation) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	self.addLocation(key, location)
+}
 
 func (self *GeoDB) Add(key string, latitude, longitude float64) {
-	self.Delete(key)
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	self.delete(key)
 	ghash, _ := GeoEncode(latitude, longitude, self.precision)
 	location := &types.GeoLocation{
 		Latitude:  latitude,
 		Longitude: longitude,
 		Geohash:   ghash,
 	}
-	self.AddLocation(key, location)
+	self.addLocation(key, location)
 }
 
-// 删除key的坐标节点
-func (self *GeoDB) Delete(key string) bool {
+func (self *GeoDB) delete(key string) bool {
 	if _, ok := self.allNodes[key]; !ok {
 		return false
 	}
@@ -92,6 +89,13 @@ func (self *GeoDB) Delete(key string) bool {
 	}
 
 	return true
+}
+
+// 删除key的坐标节点
+func (self *GeoDB) Delete(key string) bool {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	return self.delete(key)
 }
 
 func (self *GeoDB) FilterNode(selfgeo *types.GeoLocation, gll []*types.GeoLocation) ([]*types.GeoLocation, bool) {
