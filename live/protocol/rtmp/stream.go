@@ -6,7 +6,7 @@ import (
 	"github.com/SmartMeshFoundation/Perception/live/protocol/rtmp/cache"
 	"github.com/SmartMeshFoundation/Perception/live/protocol/rtmp/rtmprelay"
 	"github.com/orcaman/concurrent-map"
-	"log"
+	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"strings"
 	"time"
 )
@@ -29,7 +29,7 @@ func NewRtmpStream() *RtmpStream {
 
 func (rs *RtmpStream) HandleReader(r av.ReadCloser) {
 	info := r.Info()
-	log.Printf("HandleReader: info[%v]", info)
+	log4go.Info("HandleReader: info[%v]", info)
 
 	var stream *Stream
 	i, ok := rs.streams.Get(info.Key)
@@ -53,7 +53,7 @@ func (rs *RtmpStream) HandleReader(r av.ReadCloser) {
 
 func (rs *RtmpStream) HandleWriter(w av.WriteCloser) {
 	info := w.Info()
-	log.Printf("HandleWriter: info[%v]", info)
+	log4go.Info("HandleWriter: info[%v]", info)
 
 	var s *Stream
 	ok := rs.streams.Has(info.Key)
@@ -61,6 +61,7 @@ func (rs *RtmpStream) HandleWriter(w av.WriteCloser) {
 		s = NewStream()
 		rs.streams.Set(info.Key, s)
 		s.info = info
+		//s.AddWriter(w)
 	} else {
 		item, ok := rs.streams.Get(info.Key)
 		if ok {
@@ -163,26 +164,26 @@ func (s *Stream) StartStaticPush() {
 	streamname := key[index+1:]
 	appname := dscr[0]
 
-	log.Printf("StartStaticPush: current streamname=%s， appname=%s", streamname, appname)
+	log4go.Info("StartStaticPush: current streamname=%s， appname=%s", streamname, appname)
 	pushurllist, err := rtmprelay.GetStaticPushList(appname)
 	if err != nil || len(pushurllist) < 1 {
-		log.Printf("StartStaticPush: GetStaticPushList error=%v", err)
+		log4go.Error("StartStaticPush: GetStaticPushList error=%v", err)
 		return
 	}
 
 	for _, pushurl := range pushurllist {
 		pushurl := pushurl + "/" + streamname
-		log.Printf("StartStaticPush: static pushurl=%s", pushurl)
+		log4go.Info("StartStaticPush: static pushurl=%s", pushurl)
 
 		staticpushObj := rtmprelay.GetAndCreateStaticPushObject(pushurl)
 		if staticpushObj != nil {
 			if err := staticpushObj.Start(); err != nil {
-				log.Printf("StartStaticPush: staticpushObj.Start %s error=%v", pushurl, err)
+				log4go.Error("StartStaticPush: staticpushObj.Start %s error=%v", pushurl, err)
 			} else {
-				log.Printf("StartStaticPush: staticpushObj.Start %s ok", pushurl)
+				log4go.Info("StartStaticPush: staticpushObj.Start %s ok", pushurl)
 			}
 		} else {
-			log.Printf("StartStaticPush GetStaticPushObject %s error", pushurl)
+			log4go.Info("StartStaticPush GetStaticPushObject %s error", pushurl)
 		}
 	}
 }
@@ -190,7 +191,7 @@ func (s *Stream) StartStaticPush() {
 func (s *Stream) StopStaticPush() {
 	key := s.info.Key
 
-	log.Printf("StopStaticPush......%s", key)
+	log4go.Info("StopStaticPush......%s", key)
 	dscr := strings.Split(key, "/")
 	if len(dscr) < 1 {
 		return
@@ -204,24 +205,24 @@ func (s *Stream) StopStaticPush() {
 	streamname := key[index+1:]
 	appname := dscr[0]
 
-	log.Printf("StopStaticPush: current streamname=%s， appname=%s", streamname, appname)
+	log4go.Info("StopStaticPush: current streamname=%s， appname=%s", streamname, appname)
 	pushurllist, err := rtmprelay.GetStaticPushList(appname)
 	if err != nil || len(pushurllist) < 1 {
-		log.Printf("StopStaticPush: GetStaticPushList error=%v", err)
+		log4go.Info("StopStaticPush: GetStaticPushList error=%v", err)
 		return
 	}
 
 	for _, pushurl := range pushurllist {
 		pushurl := pushurl + "/" + streamname
-		log.Printf("StopStaticPush: static pushurl=%s", pushurl)
+		log4go.Info("StopStaticPush: static pushurl=%s", pushurl)
 
 		staticpushObj, err := rtmprelay.GetStaticPushObject(pushurl)
 		if (staticpushObj != nil) && (err == nil) {
 			staticpushObj.Stop()
 			rtmprelay.ReleaseStaticPushObject(pushurl)
-			log.Printf("StopStaticPush: staticpushObj.Stop %s ", pushurl)
+			log4go.Info("StopStaticPush: staticpushObj.Stop %s ", pushurl)
 		} else {
-			log.Printf("StopStaticPush GetStaticPushObject %s error", pushurl)
+			log4go.Error("StopStaticPush GetStaticPushObject %s error", pushurl)
 		}
 	}
 }
@@ -236,10 +237,10 @@ func (s *Stream) IsSendStaticPush() bool {
 
 	appname := dscr[0]
 
-	//log.Printf("SendStaticPush: current streamname=%s， appname=%s", streamname, appname)
+	//log4go.Printf("SendStaticPush: current streamname=%s， appname=%s", streamname, appname)
 	pushurllist, err := rtmprelay.GetStaticPushList(appname)
 	if err != nil || len(pushurllist) < 1 {
-		//log.Printf("SendStaticPush: GetStaticPushList error=%v", err)
+		//log4go.Printf("SendStaticPush: GetStaticPushList error=%v", err)
 		return false
 	}
 
@@ -252,15 +253,15 @@ func (s *Stream) IsSendStaticPush() bool {
 
 	for _, pushurl := range pushurllist {
 		pushurl := pushurl + "/" + streamname
-		//log.Printf("SendStaticPush: static pushurl=%s", pushurl)
+		//log4go.Printf("SendStaticPush: static pushurl=%s", pushurl)
 
 		staticpushObj, err := rtmprelay.GetStaticPushObject(pushurl)
 		if (staticpushObj != nil) && (err == nil) {
 			return true
 			//staticpushObj.WriteAvPacket(&packet)
-			//log.Printf("SendStaticPush: WriteAvPacket %s ", pushurl)
+			//log4go.Printf("SendStaticPush: WriteAvPacket %s ", pushurl)
 		} else {
-			log.Printf("SendStaticPush GetStaticPushObject %s error", pushurl)
+			log4go.Error("SendStaticPush GetStaticPushObject %s error=%v", pushurl, err)
 		}
 	}
 	return false
@@ -282,23 +283,23 @@ func (s *Stream) SendStaticPush(packet av.Packet) {
 	streamname := key[index+1:]
 	appname := dscr[0]
 
-	//log.Printf("SendStaticPush: current streamname=%s， appname=%s", streamname, appname)
+	//log4go.Printf("SendStaticPush: current streamname=%s， appname=%s", streamname, appname)
 	pushurllist, err := rtmprelay.GetStaticPushList(appname)
 	if err != nil || len(pushurllist) < 1 {
-		//log.Printf("SendStaticPush: GetStaticPushList error=%v", err)
+		//log4go.Printf("SendStaticPush: GetStaticPushList error=%v", err)
 		return
 	}
 
 	for _, pushurl := range pushurllist {
 		pushurl := pushurl + "/" + streamname
-		//log.Printf("SendStaticPush: static pushurl=%s", pushurl)
+		//log4go.Printf("SendStaticPush: static pushurl=%s", pushurl)
 
 		staticpushObj, err := rtmprelay.GetStaticPushObject(pushurl)
 		if (staticpushObj != nil) && (err == nil) {
 			staticpushObj.WriteAvPacket(&packet)
-			//log.Printf("SendStaticPush: WriteAvPacket %s ", pushurl)
+			//log4go.Printf("SendStaticPush: WriteAvPacket %s ", pushurl)
 		} else {
-			log.Printf("SendStaticPush GetStaticPushObject %s error", pushurl)
+			log4go.Error("SendStaticPush GetStaticPushObject %s error=%v", pushurl,err)
 		}
 	}
 }
@@ -307,7 +308,7 @@ func (s *Stream) TransStart() {
 	s.isStart = true
 	var p av.Packet
 
-	log.Printf("TransStart:%v", s.info)
+	log4go.Info("TransStart:%v", s.info)
 
 	s.StartStaticPush()
 
@@ -332,9 +333,9 @@ func (s *Stream) TransStart() {
 		for item := range s.ws.IterBuffered() {
 			v := item.Val.(*PackWriterCloser)
 			if !v.init {
-				//log.Printf("cache.send: %v", v.w.Info())
+				//log4go.Printf("cache.send: %v", v.w.Info())
 				if err = s.cache.Send(v.w); err != nil {
-					log.Printf("[%s] send cache packet error: %v, remove", v.w.Info(), err)
+					log4go.Error("[%s] send cache packet error: %v, remove", v.w.Info(), err)
 					s.ws.Remove(item.Key)
 					continue
 				}
@@ -342,10 +343,11 @@ func (s *Stream) TransStart() {
 			} else {
 				new_packet := p
 				//writeType := reflect.TypeOf(v.w)
-				//log.Printf("w.Write: type=%v, %v", writeType, v.w.Info())
+				//log4go.Printf("w.Write: type=%v, %v", writeType, v.w.Info())
 				if err = v.w.Write(&new_packet); err != nil {
-					log.Printf("[%s] write packet error: %v, remove", v.w.Info(), err)
+					log4go.Error("<- write packet error: %v", err)
 					s.ws.Remove(item.Key)
+					//s.TransStop()
 				}
 			}
 		}
@@ -353,7 +355,7 @@ func (s *Stream) TransStart() {
 }
 
 func (s *Stream) TransStop() {
-	log.Printf("TransStop: %s", s.info.Key)
+	log4go.Info("TransStop: %s", s.info.Key)
 
 	if s.isStart && s.r != nil {
 		s.r.Close(errors.New("stop old"))
@@ -388,7 +390,7 @@ func (s *Stream) CheckAlive() (n int) {
 func (s *Stream) closeInter() {
 	if s.r != nil {
 		s.StopStaticPush()
-		log.Printf("[%v] publisher closed", s.r.Info())
+		log4go.Info("[%v] publisher closed", s.r.Info())
 	}
 
 	for item := range s.ws.IterBuffered() {
@@ -397,7 +399,7 @@ func (s *Stream) closeInter() {
 			if v.w.Info().IsInterval() {
 				v.w.Close(errors.New("closed"))
 				s.ws.Remove(item.Key)
-				log.Printf("[%v] player closed and remove\n", v.w.Info())
+				log4go.Info("[%v] player closed and remove\n", v.w.Info())
 			}
 		}
 

@@ -61,6 +61,7 @@ type BroadcastMsg struct {
 
 // agent-server table
 type Astable struct {
+	cl    int32
 	wg    *sync.WaitGroup
 	lk    *sync.RWMutex
 	node  types.Node
@@ -90,7 +91,7 @@ from						bridge				  	to
 |							|						|
 */
 func (self *Astable) GenBridge(ctx context.Context, bid, tid peer.ID, pid protocol.ID) (inet.Stream, error) {
-	log4go.Info("-[ 👬 gen agent bridge 👬 ]-> (%s) --> (%s) ", bid.Pretty(), tid.Pretty())
+	log4go.Info("-[ gen_agent_bridge_start ]-> %s : (%s) --> (%s) ", pid, bid, tid)
 	am := agents_pb.NewMessage(agents_pb.AgentMessage_BRIDGE)
 	as := new(agents_pb.AgentMessage_AgentServer)
 	as.Pid = []byte(pid)
@@ -111,7 +112,7 @@ func (self *Astable) GenBridge(ctx context.Context, bid, tid peer.ID, pid protoc
 	}
 	// 3
 	if rm.Type == agents_pb.AgentMessage_BRIDGE {
-		log4go.Info("agent_bridge_handshack_success %s : %s -> %s", pid, bid.Pretty(), tid.Pretty())
+		log4go.Info("-[ gen_agent_bridge_success ]-> %s : (%s) --> (%s) ", pid, bid, tid)
 		return stream, nil
 	}
 	return nil, errors.New("error type")
@@ -211,7 +212,7 @@ func NewAstable(node types.Node) *Astable {
 	//tab := make(map[protocol.ID]*list.List)
 	wg := new(sync.WaitGroup)
 	wg.Add(1) //Wait start done
-	return &Astable{
+	a := &Astable{
 		lk:               new(sync.RWMutex),
 		node:             node,
 		table:            tab,
@@ -227,6 +228,7 @@ func NewAstable(node types.Node) *Astable {
 		prebest:  peer.ID(""),
 		precount: 0,
 	}
+	return a
 }
 
 func (self *Astable) appendIgnoreBroadcast(p interface{}) {
@@ -255,44 +257,17 @@ func (self *Astable) Start() {
 }
 
 func (self *Astable) loopBroadcast() {
-	for bm := range self.broadcastCh {
-		_, err := self.SendMsg(context.Background(), bm.to, bm.msg)
-		log4go.Info("broadcast -> err=%v , %s", err, bm.to.Pretty())
-	}
-}
-
-/*
-func (self *Astable) geodbAdd() {
-	ctx := context.Background()
-	for p := range self.geodbAddCh {
-		ascr := newAsValidatorRecord(params.P_AGENT_IPFS_API, p)
-		if obj, ok := self.asValidatorCache.Get(ascr.String()); ok {
-			if asr := obj.(*asValidatorRecord); !asr.Expired() && !asr.Alive() {
-				//fmt.Println("---- ignor ----> ", p.Pretty())
-				continue
+	for {
+		select {
+		case bm := <-self.broadcastCh:
+			if _, err := self.SendMsg(context.Background(), bm.to, bm.msg); err != nil {
+				log4go.Info("broadcast_error -> err=%v , %s", err, bm.to)
 			}
-		}
-		if _, ok := tookit.Geodb.GetNode(p.Pretty()); !ok {
-			pi, err := self.node.FindPeer(ctx, p, nil)
-			if err == nil {
-				// TODO
-				ips := tookit.GetIP4AddrByMultiaddr(pi.Addrs)
-				for _, ip := range ips {
-					c, err := self.node.GetGeoipDB().City(net.ParseIP(ip))
-					if err == nil && c.Location.Longitude > 0 && c.Location.Latitude > 0 {
-						tookit.Geodb.Add(p.Pretty(), c.Location.Latitude, c.Location.Longitude)
-					}
-				}
-			} else {
-				// 删除无法找到的节点，并且拒绝再次同步这个节点
-				//same validator
-				log4go.Info(" remove peer when can not find : %s", p.Pretty())
-				self.RemoveAll(p)
-			}
+		case <-self.node.Context().Done():
+			return
 		}
 	}
 }
-*/
 
 func (self *Astable) Append(protoID protocol.ID, location *types.GeoLocation) error {
 
@@ -363,27 +338,48 @@ func (self *Astable) fetchWithOutGeo(protoID protocol.ID) (peer.ID, error) {
 	log4go.Info("<<FetchAs>> fetch-without-geo 🌍")
 	l, ok := self.table[protoID]
 	if ok && len(l) > 0 {
-		// 随机
-		as := l[rand.Intn(len(l))]
-		if self.AgentServerValidator(protoID, as.ID) {
-			return as.ID, nil
+		rll := l
+		// 异步操作，当节候选点大于 20 个时则只取前 20 并行处理，如果失败则递归处理
+		r := 10
+		if len(rll) < 10 {
+			r = len(rll)
 		}
+		//l = append(l[r:], l[0:r]...)
+		ctx, cancel := context.WithCancel(context.Background())
+		cll := rll[0:r]
+		peerCh := make(chan peer.ID, r)
+		self.AsyncAgentServerValidator(ctx, protoID, cll, peerCh)
+		for pp := range peerCh {
+			if pp != peer.ID("") {
+				cancel()
+				// 调整列表顺序
+				l = self.table[protoID]
+				if len(l) > 1 {
+					fmt.Println(len(l), "before-->", l[0].ID, l[len(l)-1].ID)
+					l = append(l[2:], l[0], l[1])
+					/*					for {
+											l0 := l[0].ID
+											l = append(l[1:], l[0])
+											if l0 == pp {
+												break
+											}
+										}*/
+					self.table[protoID] = l
+					fmt.Println(len(l), "after-->", l[0].ID, l[len(l)-1].ID)
+				}
+				return pp, nil
+			}
+		}
+
+		// 随机
+		//as := l[rand.Intn(len(l))]
+		/*		p := l[0].ID
+				self.table[protoID] = append(l[1:], l[0])
+				if self.AgentServerValidator(protoID, p) {
+					return p, nil
+				}*/
 		return self.fetchWithOutGeo(protoID)
 	}
-	/*	if ok && l.Len() > 0 {
-		e := l.Front()
-		as, ok := e.Value.(*types.GeoLocation)
-		if !ok {
-			l.Remove(e)
-			goto RETRY
-		}
-		//as := e.Value.(peer.ID)
-		if self.AgentServerValidator(protoID, as.ID) {
-			defer l.MoveToBack(e)
-			return as.ID, nil
-		}
-		return self.fetchWithOutGeo(protoID)
-	}*/
 	return "", errors.New("agent-server not found")
 }
 
@@ -399,50 +395,75 @@ func (self *Astable) fetchWithGeo(protoID protocol.ID) (peer.ID, error) {
 		if !ok {
 			return self.fetchWithOutGeo(protoID)
 		}
+		// 异步操作，当节候选点大于 20 个时则只取前 20 并行处理，如果失败则递归处理
+		r := 10
+		if len(rll) < 10 {
+			r = len(rll)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cll := rll[0:r]
+		peerCh := make(chan peer.ID, r)
+		self.AsyncAgentServerValidator(ctx, protoID, cll, peerCh)
+		for pp := range peerCh {
+			if pp != peer.ID("") {
+				cancel()
+				// 调整列表顺序
+				l = self.table[protoID]
+				if len(l) > 1 {
+					for {
+						l0 := l[0].ID
+						l = append(l[1:], l[0])
+						if l0 == pp {
+							break
+						}
+					}
+					self.table[protoID] = l
+				}
+				return pp, nil
+			}
+		}
+		// 轮巡规则
+		/*		p := rll[0].ID
+				for {
+					l0 := l[0].ID
+					l = append(l[1:], l[0])
+					if l0 == p {
+						break
+					}
+				}
+				self.table[protoID] = l
+				log4go.Info("<<FetchAs>> fetch-with-geo-success : count=%d, res_count=%d, target=%s", len(l), len(rll), p)*/
+		// 随机规则
+		/*
 		i := 0
 		if size := len(rll); size > 1 {
 			i = rand.Intn(size)
 		}
 		p := rll[i].ID
-		log4go.Info("<<FetchAs>> fetch-with-geo-success : total=%d, i=%d, target=%s", len(rll), i, p.Pretty())
-		if self.AgentServerValidator(protoID, p) {
-			return p, nil
-		}
+		log4go.Info("<<FetchAs>> fetch-with-geo-success : count=%d, res_count=%d, i=%d, target=%s", len(l), len(rll), i, p)
+		*/
+		/*		if self.AgentServerValidator(protoID, p) {
+					return p, nil
+				}
+				log4go.Info("<<FetchAs>> validator_fail : total=%d, target=%s", len(rll), p)*/
 		return self.fetchWithGeo(protoID)
 	}
-	/*	if ok && l.Len() > 0 {
-		gll := make([]*types.GeoLocation, 0)
-		for e := l.Front(); e != nil; e = e.Next() {
-			as, ok := e.Value.(*types.GeoLocation)
-			if !ok {
-				l.Remove(e)
-				continue
-			}
-			gll = append(gll, as)
-		}
-		rll, ok := tookit.Geodb.FilterNode(selfgeo, gll)
-		if !ok {
-			return self.fetchWithOutGeo(protoID)
-		}
-		i := 0
-		if size := len(rll); size > 1 {
-			i = rand.Intn(size)
-		}
-		p := rll[i].ID
-		log4go.Info("<<FetchAs>> fetch-with-geo-success : total=%d, i=%d, target=%s", len(rll), i, p.Pretty())
-		if self.AgentServerValidator(protoID, p) {
-			return p, nil
-		}
-		return self.fetchWithGeo(protoID)
-	}*/
 	return "", errors.New("agent-server not found")
 }
 
 func (self *Astable) Fetch(protoID protocol.ID) (peer.ID, error) {
+	switch protoID {
+	case params.P_AGENT_REST:
+		return self.fetchWithGeo(protoID)
+	default:
+		return self.fetchWithOutGeo(protoID)
+	}
+	/*
 	if self.node.GetGeoLocation() == nil {
 		return self.fetchWithOutGeo(protoID)
 	}
 	return self.fetchWithGeo(protoID)
+	*/
 }
 
 // 这个方法只有检查 ip 坐标的地方在调用，所以被触发时一定是目标节点无效
@@ -468,23 +489,15 @@ func (self *Astable) Remove(protoID protocol.ID, id peer.ID) {
 	for i, gl := range l {
 		if gl.ID == id || gl.ID == "" {
 			self.table[protoID] = append(l[:i], l[i+1:]...)
-			log4go.Info("🔪 astab_remove ---> %s = %s", protoID, id.Pretty())
+			log4go.Debug("🔪 astab_remove_success ---> %s = %s", protoID, id)
 			new(filterBody).Body(protoID, id).Remove()
 		}
 	}
-	/*	for e := l.Front(); e != nil; e = e.Next() {
-		if gl, ok := e.Value.(*types.GeoLocation); ok && gl.ID == id {
-			l.Remove(e)
-			new(filterBody).Body(protoID, id).Remove()
-		} else if !ok {
-			l.Remove(e)
-		}
-	}*/
 }
 
 func (self *Astable) Reset(location *types.GeoLocation) {
 	id := location.ID
-	log4go.Info("🏯 --->", id.Pretty(), location)
+	log4go.Debug("🏯 --->", id.Pretty(), location)
 	self.lk.Lock()
 	defer func() {
 		tookit.Geodb.Add(id.Pretty(), location.Latitude, location.Longitude)
@@ -505,22 +518,6 @@ func (self *Astable) Reset(location *types.GeoLocation) {
 			}
 		}
 	}
-	/*	for _, protoID := range params.P_AGENT_ALL {
-		l := self.table[protoID]
-		if l == nil || l.Len() == 0 {
-			continue
-		}
-		for e := l.Front(); e != nil; e = e.Next() {
-			if gl, ok := e.Value.(*types.GeoLocation); ok && gl.ID == id {
-				log4go.Info("---> reset_geo : %s , %s , [ %v -> %v ] ", protoID, id.Pretty(), gl, location)
-				gl.Latitude = location.Latitude
-				gl.Longitude = location.Longitude
-				break
-			} else if !ok {
-				l.Remove(e)
-			}
-		}
-	}*/
 }
 
 func (self *Astable) QuerySelfLocation(target peer.ID) error {
@@ -545,6 +542,7 @@ func (self *Astable) QuerySelfLocation(target peer.ID) error {
 
 func (self *Astable) loop() {
 	var (
+		//ctx          = context.Background()
 		timer        = time.NewTimer(time.Second * time.Duration(self.intrval))
 		resetIntrval = func(t *time.Timer, ast *Astable) {
 			if ast.intrval >= flush_intrval_limit {
@@ -619,14 +617,21 @@ func (self *Astable) loop() {
 			}
 		}
 		wg.Wait()
-		log4go.Info("Agent : COUNT_AS_TAB : count=%d , best=%s , total_conns = %d , total_send = %d", count, self.best, len(conns), totalSendTaskLog)
 		// 周期到邻居节点去获取 astab , 只去 best 节点获取
 		self.getAstabFromBestPeer(&count)
+		log4go.Info("Agent : COUNT_AS_TAB : count=%d , best=%s , total_conns = %d , total_send = %d", count, self.best, len(conns), totalSendTaskLog)
+
 	}
 
-	for range timer.C {
-		resetIntrval(timer, self)
-		doloop()
+	for {
+		select {
+		case <-timer.C:
+			doloop()
+			//self.cleanAstab(ctx)
+			resetIntrval(timer, self)
+		case <-self.node.Context().Done():
+			return
+		}
 	}
 }
 
@@ -662,7 +667,7 @@ func (self *Astable) resetBestAndCount(p peer.ID, count *int32, wg *sync.WaitGro
 // 周期到邻居节点去获取 astab , 只去 best 节点获取
 func (self *Astable) getAstabFromBestPeer(count *int32) {
 	best := self.best
-	log4go.Info("<<astabloop-count>>  %d, %s", count, best)
+	log4go.Info("<<astabloop-count>>  %d, %s", *count, best)
 	if atomic.LoadInt32(count) > 0 {
 		if best.Pretty() == self.prebest.Pretty() && *count <= self.precount {
 			return
@@ -680,6 +685,7 @@ func (self *Astable) getAstabFromBestPeer(count *int32) {
 				log4go.Warn("⚠️ skip bad agent proto %v", as.Pid)
 				continue
 			}
+			i := 0
 			for _, location := range as.Locations {
 				id := peer.ID(location.Peer)
 				asvr := newAsValidatorRecord(pid, id)
@@ -687,16 +693,60 @@ func (self *Astable) getAstabFromBestPeer(count *int32) {
 				if ok {
 					avr := obj.(*asValidatorRecord)
 					if !avr.Alive() && !avr.Expired() {
-						log4go.Warn("not allow, %s", avr.String())
+						log4go.Debug("not allow, %s", avr.String())
 						continue
 					}
 				}
 				tookit.Geodb.Add(id.Pretty(), float64(location.Latitude), float64(location.Longitude))
 				gl := types.NewGeoLocation(float64(location.Longitude), float64(location.Latitude))
 				gl.ID = id
-				log4go.Debug("best -> astab.Append : %s", gl.ID)
-				self.Append(pid, gl)
+				er := self.Append(pid, gl)
+				i++
+				log4go.Debug(":: %d/%d :: %v :: best -> astab.Append : %s \n", i, len(as.Locations), er, gl.ID)
 			}
 		}
 	}
+}
+
+func (self *Astable) cleanAstab(ctx context.Context) {
+	if atomic.LoadInt32(&self.cl) == 1 {
+		log4go.Info("<<cleanAstab-ignore>>")
+		return
+	}
+	atomic.StoreInt32(&self.cl, 1)
+	defer atomic.StoreInt32(&self.cl, 0)
+
+	var (
+		s  = time.Now().Unix()
+		wg = new(sync.WaitGroup)
+		ch = make(chan struct {
+			p  protocol.ID
+			id peer.ID
+		})
+	)
+
+	valFn := func(w *sync.WaitGroup) {
+		defer w.Done()
+		for c := range ch {
+			self.AgentServerValidator(c.p, c.id)
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go valFn(wg)
+	}
+
+	for p, gl := range self.table {
+		for _, g := range gl {
+			ch <- struct {
+				p  protocol.ID
+				id peer.ID
+			}{p, g.ID}
+		}
+	}
+
+	close(ch)
+	wg.Wait()
+	log4go.Info("<<cleanAstab-success>> time used : %d", time.Now().Unix()-s)
 }

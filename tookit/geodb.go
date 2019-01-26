@@ -114,7 +114,7 @@ func (self *GeoDB) FilterNode(selfgeo *types.GeoLocation, gll []*types.GeoLocati
 				for _, gl := range gll {
 					if gl.ID.Pretty() == a {
 						km := DistanceByLocation(selfgeo, gl)
-						log4go.Info("<<FilterNode>> find_as -> %s : %.2fkm", gl.ID.Pretty(), km)
+						log4go.Debug("<<FilterNode>> find_as -> precision=%d , %s : %.2fkm", i, gl.ID, km)
 						ok, rll = true, append(rll, gl)
 					}
 				}

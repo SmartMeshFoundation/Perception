@@ -69,7 +69,12 @@ func (self *AgentClientImpl) runagent(cfg types.AgentCfg) {
 		log4go.Error(err)
 		return
 	}
-
+	go func() {
+		select {
+		case <-self.node.Context().Done():
+			l.Close()
+		}
+	}()
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -110,42 +115,6 @@ func (self *AgentClientImpl) handleConn(ctx context.Context, proto string, conn 
 	}
 }
 
-/*
-from						bridge				  	to
-|							|						|
-|---1 AgentMessage_BRIDGE-->|						|
-|							|-----2 NewStream------>|
-|<--3 AgentMessage_BRIDGE---|						|
-|							|						|
-|<------------r/w---------->|<----------r/w-------->|
-|							|						|
-*/
-/*
-func (self *AgentClientImpl) GenBridge(ctx context.Context, bid, tid peer.ID, pid protocol.ID) (inet.Stream, error) {
-	log4go.Info("-[ 👬 gen agent bridge 👬 ]-> (%s) --> (%s) ", bid.Pretty(), tid.Pretty())
-	am := agents_pb.NewMessage(agents_pb.AgentMessage_BRIDGE)
-	as := new(agents_pb.AgentMessage_AgentServer)
-	as.Pid = []byte(pid)
-	as.Peers = [][]byte{[]byte(tid)}
-	am.AgentServer = as
-	stream, err := self.node.Host().NewStream(ctx, bid, params.P_CHANNEL_AGENTS)
-	if err != nil {
-		return nil, err
-	}
-	// 1
-	rm, err := self.table.SendMsgByStream(ctx, stream, am)
-	if err != nil {
-		return nil, err
-	}
-	// 3
-	if rm.Type == agents_pb.AgentMessage_BRIDGE {
-		log4go.Info("agent_bridge_handshack_success %s : %s -> %s", pid, bid.Pretty(), tid.Pretty())
-		return stream, nil
-	}
-	return nil, errors.New("error type")
-}
-*/
-
 func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 	findby := make(chan peer.ID)
 	var tc inet.Stream
@@ -168,10 +137,12 @@ func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 	tout := timeout.(int)
 	log4go.Info("-> timeout=%d", tout)
 
-	// TODO 70 client 固定通道测试
+	// TODO client 固定通道测试
+	//target, err := peer.IDB58Decode("QmTAdw41ZqQG5GhHSwptyQxiZNuvzUiyAcpQiTRokBCcSn") // home
 	target, err := self.table.Fetch(p)
 	log4go.Info("-> target=%v , err=%v", target.Pretty(), err)
-	// target, err = peer.IDB58Decode("QmNNC87W9kWhn4UZBKMGr9APpk4KDN1ERC5YJqvwX1QxwK")
+	//target, err = peer.IDB58Decode("QmVSQykW55LwXj5CLSFwG2xaZytQfGT6SJ11qdjxgSKpY5")
+	// target, err = peer.IDB58Decode("QmNNC87W9kWhn4UZBKMGr9APpk4KDN1ERC5YJqvwX1QxwK") // 70 节点
 	//target, err := peer.IDB58Decode("QmXu6Cu5CpqBfCV9Pw9jQN8obwV3nUCVuvfaXhtRpomZGp")
 	//log4go.Info("set_test_target --> %s", target.Pretty())
 	if err != nil {
@@ -179,7 +150,7 @@ func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 		return
 	}
 
-	pi, err := self.node.FindPeer(ctx, target, findby)
+	pi, err := self.node.FindPeer(nil, target, findby)
 	if err != nil {
 		sc.Write([]byte(err.Error()))
 		return
@@ -200,7 +171,7 @@ func (self *AgentClientImpl) rpchandler(ctx context.Context, sc net.Conn) {
 		tc, err = self.node.Host().NewStream(ctx, target, p)
 	}
 	//tc, err := self.node.Host().NewStream(ctx, target, p)
-	log4go.Info("-> target=%v, p=%v, err=%v", target.Pretty(), p, err)
+	log4go.Debug("-> target=%v, p=%v, err=%v", target.Pretty(), p, err)
 	if err != nil {
 		sc.Write([]byte(err.Error()))
 		sc.Close()

@@ -36,12 +36,11 @@ var (
 	// 7				17			18			±0.00068	±0.00068	±0.076
 	// 8				20			20			±0.000085	±0.00017	±0.019
 	GeoPrecision = 4
-
 	NetworkID = "492133e95f196e8915a5c8b5f7a70777cea31606b0e20ff2e31f8dbceec83706"
-
 	HomeDir  = defaultHomeDir()
 	DataDir  = fmt.Sprintf("%s/data", HomeDir)
 	HTTPPort = DefaultHTTPPort
+	LivePort = DefaultLivePort
 )
 
 func defaultHomeDir() string {
@@ -57,6 +56,7 @@ func defaultHomeDir() string {
 	}
 	return ""
 }
+
 
 func home() string {
 	if home := os.Getenv("HOME"); home != "" {

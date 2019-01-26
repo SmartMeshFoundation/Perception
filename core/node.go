@@ -3,19 +3,20 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/cc14514/go-geoip2"
 	"github.com/SmartMeshFoundation/Perception/agents"
+	"github.com/SmartMeshFoundation/Perception/cmd/utils"
+	"github.com/SmartMeshFoundation/Perception/core/discovery"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/SmartMeshFoundation/Perception/rpc"
 	"github.com/SmartMeshFoundation/Perception/rpc/service"
 	"github.com/SmartMeshFoundation/Perception/tookit"
-	"github.com/cc14514/go-geoip2"
 	"gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht"
 	opts "gx/ipfs/QmfZaUn1SJEsSij84UGBhtqyN1J3UECdujwkZV1ve7rRWX/go-libp2p-kad-dht/opts"
 	"io/ioutil"
 	"net"
 
-	//ic "gx/ipfs/QmPvyPwuCgJ7pDmrKDxRtsScJgBaM5h4EpRL2qQJsmXf4n/go-libp2p-crypto"
 	circuit "gx/ipfs/QmNcNWuV38HBGYtRUi3okmfXSMEmXWwNgb82N3PzqqsHhY/go-libp2p-circuit"
 	ic "gx/ipfs/QmNiJiXwWE3kRhZrC5ej3kSjWHm337pYfhjLGSCDNKJP2s/go-libp2p-crypto"
 	inet "gx/ipfs/QmPtFaR7BWHLAjSwLh9kXcyrgTzDpuhcWLkx8ioa9RMYnx/go-libp2p-net"
@@ -23,7 +24,6 @@ import (
 	ma "gx/ipfs/QmRKLtwMw131aK7ugC3G7ybpumMz78YrJe5dzneyindvG1/go-multiaddr"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"gx/ipfs/QmV281Yximj5ftHwYMSRCLbFhErRxqUFP2F8Rfa19LeToz/go-libp2p"
-	"gx/ipfs/QmV281Yximj5ftHwYMSRCLbFhErRxqUFP2F8Rfa19LeToz/go-libp2p/p2p/discovery"
 	p2pbhost "gx/ipfs/QmV281Yximj5ftHwYMSRCLbFhErRxqUFP2F8Rfa19LeToz/go-libp2p/p2p/host/basic"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
 	smux "gx/ipfs/QmY9JXR3FupnYAYJWK9aMr9bCpqWKcToQ1tz8DVGTrHpHw/go-stream-muxer"
@@ -46,6 +46,8 @@ func (blankValidator) Validate(_ string, _ []byte) error        { return nil }
 func (blankValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }
 
 type NodeImpl struct {
+	ctx         context.Context
+	cancel      context.CancelFunc
 	host        host.Host
 	Routing     *dht.IpfsDHT
 	sg          types.StreamGenerater
@@ -240,8 +242,7 @@ func libp2popts(ctx context.Context, key ic.PrivKey, port int) []libp2p.Option {
 	return libp2pOpts
 }
 
-func NewNode(key ic.PrivKey, port int) *NodeImpl {
-	ctx := context.Background()
+func NewNode(ctx context.Context, cancel context.CancelFunc, key ic.PrivKey, port int) *NodeImpl {
 	hostObj, err := libp2p.New(ctx, libp2popts(ctx, key, port)...)
 	if err != nil {
 		panic(err)
@@ -253,7 +254,7 @@ func NewNode(key ic.PrivKey, port int) *NodeImpl {
 	if err != nil {
 		panic(err)
 	}
-	node := &NodeImpl{host: hostObj, Routing: d}
+	node := &NodeImpl{ctx: ctx, cancel: cancel, host: hostObj, Routing: d}
 	sg := NewStreamGenerater(node)
 	node.sg = sg
 	return node
@@ -262,10 +263,26 @@ func NewNode(key ic.PrivKey, port int) *NodeImpl {
 func (self *NodeImpl) Close() {
 	self.Routing.Close()
 	self.host.Close()
+	if self.cancel != nil {
+		self.cancel()
+	}
+
+	select {
+	case _, ok := <-utils.Stop:
+		if !ok {
+			fmt.Println("normal_skip")
+			return
+		}
+	case <-time.After(100 * time.Millisecond):
+		fmt.Println("close_node.")
+		close(utils.Stop)
+		return
+	}
+
 }
 
-func (self *NodeImpl) Bootstrap(ctx context.Context) error {
-	return self.Routing.Bootstrap(ctx)
+func (self *NodeImpl) Bootstrap() error {
+	return self.Routing.Bootstrap(self.ctx)
 }
 
 func (self *NodeImpl) ConnectWithTTL(ctx context.Context, targetID interface{}, targetAddrs []ma.Multiaddr, ttl time.Duration) error {
@@ -287,20 +304,20 @@ func (self *NodeImpl) ConnectWithTTL(ctx context.Context, targetID interface{}, 
 
 	return nil
 }
-func (self *NodeImpl) Connect(ctx context.Context, targetID interface{}, targetAddrs []ma.Multiaddr) error {
-	return self.ConnectWithTTL(ctx, targetID, targetAddrs, peerstore.TempAddrTTL)
+func (self *NodeImpl) Connect(targetID interface{}, targetAddrs []ma.Multiaddr) error {
+	return self.ConnectWithTTL(self.ctx, targetID, targetAddrs, peerstore.TempAddrTTL)
 }
 
-func (self *NodeImpl) PutValue(ctx context.Context, key string, value []byte) error {
-	err := self.Routing.PutValue(ctx, key, value)
+func (self *NodeImpl) PutValue(key string, value []byte) error {
+	err := self.Routing.PutValue(self.ctx, key, value)
 	if err != nil {
 		log4go.Error("node.put_err -> err=%v , key=%s", err, key)
 	}
 	return err
 }
 
-func (self *NodeImpl) GetValue(ctx context.Context, key string) ([]byte, error) {
-	buf, err := self.Routing.GetValue(ctx, key)
+func (self *NodeImpl) GetValue(key string) ([]byte, error) {
+	buf, err := self.Routing.GetValue(self.ctx, key)
 	if err != nil {
 		log4go.Error("node.get_err -> err=%v , key=%s", err, key)
 	}
@@ -308,6 +325,9 @@ func (self *NodeImpl) GetValue(ctx context.Context, key string) ([]byte, error) 
 }
 
 func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby chan peer.ID) (pstore.PeerInfo, error) {
+	if ctx == nil {
+		ctx = self.ctx
+	}
 	var (
 		tid  peer.ID
 		err  error
@@ -325,7 +345,7 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 		tid = targetID.(peer.ID)
 	}
 	defer func() {
-		stop <- 0
+		close(stop)
 	}()
 	//ctx = notif.RegisterForQueryEvents(ctx, qch)
 	ctx, qch := notif.RegisterForQueryEvents(ctx)
@@ -334,9 +354,13 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 		for {
 			select {
 			case q := <-qch:
+				if q == nil {
+					log4go.Debug("<<QueryEvents>> return_nil")
+					return
+				}
 				if q.Type == notif.PeerFindby {
 					id = q.ID
-					log4go.Info(" 🌟️   try to conn temp or relay by %s", id.Pretty())
+					log4go.Info("try to conn temp or relay by %s", id)
 				}
 			case <-stop:
 				if id != "" && findby != nil {
@@ -344,7 +368,6 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 				} else if findby != nil {
 					findby <- ""
 				}
-				close(stop)
 				return
 			}
 		}
@@ -353,7 +376,11 @@ func (self *NodeImpl) FindPeer(ctx context.Context, targetID interface{}, findby
 	return pi, err
 }
 
-func (self *NodeImpl) Start(seed bool) {
+func (self *NodeImpl) Context() context.Context {
+	return self.ctx
+}
+
+func (self *NodeImpl) Start(nd bool) {
 	sh := NewStreamHandler(self)
 	self.host.SetStreamHandler(params.P_CHANNEL_PING, sh.pingHandler)
 	self.host.SetStreamHandler(params.P_CHANNEL_LIVE, sh.liveHandler)
@@ -363,8 +390,8 @@ func (self *NodeImpl) Start(seed bool) {
 
 	service.Registry("funcs", "0.0.1", service.NewFuncs(self))
 	rpc := rpc.NewRPCServer(self)
-	go rpc.Start()
-	if !seed {
+	go rpc.Start(self.ctx)
+	if !nd {
 		go loop_bootstrap(self)
 	}
 	if self.agentServer != nil {
@@ -417,7 +444,7 @@ func (self *NodeImpl) setupLocation() {
 	go func() {
 		log4go.Info("geoipdb already started , wait for get self geo ...")
 		var ips []string
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 3; i++ {
 			mas := self.Host().Addrs()
 			ips = self.GetIP4AddrByMultiaddr(mas)
 			for _, ip := range ips {
@@ -430,18 +457,29 @@ func (self *NodeImpl) setupLocation() {
 					self.selfgeo = types.NewGeoLocation(c.Location.Longitude, c.Location.Latitude)
 					h, _ := tookit.GeoEncode(self.selfgeo.Latitude, self.selfgeo.Longitude, params.GeoPrecision)
 					self.selfgeo.Geohash = h
+					self.selfgeo.ID = self.host.ID()
 					log4go.Info("get self geo success , location : %v", *self.selfgeo)
 					return
 				}
 			}
-			<-time.After(2 * time.Second)
+			select {
+			case <-self.ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 		}
-		// 如果10秒没拿到，也许是本机没有直接公网ip，需要问邻居节点要一个了
+		// 如果超过 5 秒没拿到，也许是本机没有直接公网ip，需要问邻居节点要一个了
 		log4go.Warn("public ip not found", ips)
 		for {
 			log4go.Warn("try ask astab by async action.")
 			params.AACh <- params.NewAA(params.AA_GET_MY_LOCATION, nil)
-			<-time.After(3 * time.Second)
+			select {
+			case <-self.ctx.Done():
+				return
+			case <-time.After(3 * time.Second):
+				continue
+			}
 			if self.selfgeo != nil && tookit.VerifyLocation(self.selfgeo.Latitude, self.selfgeo.Longitude) {
 				log4go.Info("query self geo success , location : %v", *self.selfgeo)
 				return

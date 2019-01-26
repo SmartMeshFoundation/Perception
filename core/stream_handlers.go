@@ -15,6 +15,7 @@ import (
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
 	"gx/ipfs/QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN/go-libp2p-protocol"
+	"net"
 	"os"
 	"path"
 	"sync"
@@ -353,23 +354,83 @@ func (self *StreamHandler) pingHandler(s inet.Stream) {
 }
 
 func (self *StreamHandler) liveHandler(s inet.Stream) {
-	buf := make([]byte, 4)
-	if i, e := s.Read(buf); e != nil {
+	log4go.Info("-- live_handler_begin --> %s", s.Conn().RemotePeer())
+	var (
+		ts       net.Conn
+		wg       sync.WaitGroup
+		BUF_SIZE = 2048
+		//timeout  = time.Second * 15
+	)
+
+	//s.SetDeadline(time.Now().Add(timeout))
+	defer func() {
+		if s != nil {
+			s.Close()
+		}
+		if ts != nil {
+			ts.Close()
+		}
+	}()
+
+	ts, e := net.Dial("tcp", fmt.Sprintf("localhost:%d", params.LivePort))
+	//ts.SetReadDeadline(time.Now().Add(timeout))
+	if e != nil {
+		s.Close()
 		log4go.Error(e)
-		s.Write([]byte(PANG))
-		return
-	} else if i != 4 || PING != string(buf) {
-		log4go.Error("error : %d , %s", i, string(buf))
-		s.Write([]byte(PANG))
 		return
 	}
-	log4go.Info("%s from %s", string(buf), s.Conn().RemotePeer().Pretty())
-	t, err := s.Write([]byte(PONG))
-	if err != nil {
-		log4go.Error("error : %v", err)
-	}
-	log4go.Info("pong %d", t)
-	s.Close()
+	// ----------------------------------------------------------
+	// 2 gen bridge channel
+	// ----------------------------------------------------------
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, BUF_SIZE)
+		for {
+
+			i, e := s.Read(buf)
+			if e != nil {
+				log4go.Error("g1_s_read_err ==> %v", e)
+				if ts != nil {
+					ts.Close()
+				}
+				return
+			}
+			_, e = ts.Write(buf[0:i])
+			if e != nil {
+				log4go.Error("g1_ts_write_err ==> %v", e)
+				if s != nil {
+					s.Close()
+				}
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, BUF_SIZE)
+		for {
+			i, e := ts.Read(buf)
+			if e != nil {
+				log4go.Error("g2_ts_read_err ==> %v", e)
+				if s != nil {
+					s.Close()
+				}
+				return
+			}
+			//s.SetWriteDeadline(time.Now().Add(timeout))
+			_, e = s.Write(buf[0:i])
+			if e != nil {
+				log4go.Error("g2_s_write_err ==> %v", e)
+				if ts != nil {
+					ts.Close()
+				}
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	log4go.Info("-- live_handler_over --> %s", s.Conn().RemotePeer())
 }
 
 //			 |<-------------------------- head(41) ---------------------------->|

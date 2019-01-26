@@ -123,6 +123,7 @@ type CalcTime interface {
 	CalcBaseTimestamp()
 }
 
+//[<key: cc14514/111, URL: rtmp://127.0.0.1:11935/cc14514/111, UID: IEMtmrt8Rb21XFwK, Inter: false>]
 type Info struct {
 	Key   string
 	URL   string

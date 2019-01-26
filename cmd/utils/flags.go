@@ -14,10 +14,14 @@ var (
 	App      *cli.App
 	Node     types.Node
 	Astab    *agents.Astable
-	Stop     chan struct{}
+	Stop     = make(chan struct{})
 	PPROF    bool
 
 	Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "nodiscovery",
+			Usage: "disable discovery",
+		},
 		cli.BoolFlag{
 			Name:  "seed",
 			Usage: "start as a bootnode rule",
@@ -26,6 +30,11 @@ var (
 			Name:  "port,p",
 			Usage: "listen port",
 			Value: params.DefaultPort,
+		},
+		cli.IntFlag{
+			Name:  "live",
+			Usage: "live port",
+			Value: params.DefaultLivePort,
 		},
 		cli.IntFlag{
 			Name:  "rpcport",

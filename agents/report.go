@@ -70,14 +70,29 @@ func Report(k, s, e string) map[string]interface{} {
 	if !isEnable[k] {
 		return nil
 	}
-	result := make(map[string]interface{})
-	start, _ := new(big.Int).SetString(s, 10)
-	end, _ := new(big.Int).SetString(e, 10)
-	if start.Cmp(end) > 0 {
-		end = start
+	var (
+		tf     = "20060102"
+		result = make(map[string]interface{})
+		oneday time.Duration
+	)
+	oneday, _ = time.ParseDuration("24h")
+
+	ss, err := time.Parse(tf, s)
+	if err != nil {
+		return result
 	}
-	for ; start.Cmp(end) <= 0; start = new(big.Int).Add(start, big.NewInt(1)) {
-		rk := start.String()
+
+	ee, err := time.Parse(tf, e)
+	if err != nil {
+		return result
+	}
+
+	if ss.After(ee) {
+		ee = ss
+	}
+
+	for ; !ss.Equal(ee.Add(oneday)); ss = ss.Add(oneday) {
+		rk := ss.Format(tf)
 		kk := path.Join(k, rk)
 		v, err := db.Get([]byte(kk))
 		if err != nil {
@@ -87,5 +102,5 @@ func Report(k, s, e string) map[string]interface{} {
 		}
 	}
 	fmt.Println(result)
-	return result
+	return map[string]interface{}{k:result}
 }

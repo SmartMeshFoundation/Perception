@@ -1,9 +1,10 @@
 package core
 
 import (
-	"testing"
 	"context"
 	"encoding/hex"
+	"testing"
+	"time"
 )
 
 func TestLoopBootstrap(t *testing.T) {
@@ -35,5 +36,12 @@ func TestAbc(t *testing.T) {
 	m["c"] = 1
 	m["c"] = 2
 	j := len(m)
-	t.Log(len(m),i,j)
+	t.Log(len(m), i, j)
+}
+
+func TestTime(t *testing.T) {
+	s := time.Now().Unix()
+	<-time.After(1 * time.Second)
+	e := time.Now().Unix() - s
+	t.Log(s, e)
 }

@@ -14,8 +14,8 @@ import (
 	"github.com/SmartMeshFoundation/Perception/params"
 	ma "gx/ipfs/QmRKLtwMw131aK7ugC3G7ybpumMz78YrJe5dzneyindvG1/go-multiaddr"
 	"gx/ipfs/QmSzEdVLaPMQGAKKGo4mKjsbWcfz6w8CoDjhRPxdk7xYdn/go-ipfs-addr"
+	"gx/ipfs/QmVMCXmZjzL3jiMcapzDvLgsZ4EFP1CFuVGHsWLVBFB6ed/go-lightrpc/rpcserver"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
-	"gx/ipfs/QmYaVXmXZNpWs6owQ1rk5VAiwNinkTh2cYZuYx1JDSactL/go-lightrpc/rpcserver"
 	"io"
 	"os"
 )
@@ -68,6 +68,11 @@ func (self *Funcs) AsReport(requestParameter interface{}) rpcserver.Success {
 	log4go.Info("output<-- %v", success)
 	return success
 
+}
+
+func (self *Funcs) Exit(requestParameter interface{}) rpcserver.Success {
+	self.node.Close()
+	return rpcserver.Success{Success: true,}
 }
 
 func (self *Funcs) Myid(requestParameter interface{}) rpcserver.Success {
@@ -184,7 +189,7 @@ func (self *Funcs) Conn(requestParameter interface{}) rpcserver.Success {
 		success.Error("1", err)
 		fmt.Println("addr_error :", a, err)
 	} else {
-		err = self.node.Connect(context.Background(), string(addr.ID()), []ma.Multiaddr{addr.Transport()})
+		err = self.node.Connect(string(addr.ID()), []ma.Multiaddr{addr.Transport()})
 		if err != nil {
 			success.Error("2", err)
 			fmt.Println("conn_error :", a, err)
@@ -197,7 +202,7 @@ func (self *Funcs) Conn(requestParameter interface{}) rpcserver.Success {
 
 func (self *Funcs) Bootstrap(requestParameter interface{}) rpcserver.Success {
 	success := &rpcserver.Success{Success: true}
-	err := self.node.Bootstrap(context.Background())
+	err := self.node.Bootstrap()
 	if err != nil {
 		success.Error("1", err)
 		fmt.Println("bootstrap_error:", err)
@@ -209,10 +214,11 @@ func (self *Funcs) Put(requestParameter interface{}) rpcserver.Success {
 	args := requestParameter.(map[string]interface{})
 	key, value := args["key"].(string), args["value"].(string)
 	success := &rpcserver.Success{Success: true}
-	if err := self.node.PutValue(context.Background(), fmt.Sprintf("/cc14514/%s", key), []byte(value)); err != nil {
+	if err := self.node.PutValue(fmt.Sprintf("/cc14514/%s", key), []byte(value)); err != nil {
 		success.Error("2", err)
 		fmt.Println("put_error :", err)
 	}
+
 	return *success
 }
 
@@ -221,7 +227,7 @@ func (self *Funcs) Get(requestParameter interface{}) rpcserver.Success {
 	key := args["key"].(string)
 	success := &rpcserver.Success{Success: true}
 
-	buf, err := self.node.GetValue(context.Background(), fmt.Sprintf("/cc14514/%s", key))
+	buf, err := self.node.GetValue(fmt.Sprintf("/cc14514/%s", key))
 	if err != nil {
 		success.Error("2", err)
 		fmt.Println("put_error :", err)
@@ -345,12 +351,11 @@ func (self *Funcs) Ping(requestParameter interface{}) rpcserver.Success {
 	return *success
 }
 func (self *Funcs) Findpeer(requestParameter interface{}) rpcserver.Success {
-	ctx := context.Background()
 	args := requestParameter.(map[string]interface{})
 	to := args["to"].(string)
 	success := &rpcserver.Success{Success: true}
 	findby := make(chan peer.ID)
-	pi, err := self.node.FindPeer(ctx, to, findby)
+	pi, err := self.node.FindPeer(nil, to, findby)
 	if err != nil {
 		success.Error("3", err)
 		fmt.Println("findpeer_error :", err)

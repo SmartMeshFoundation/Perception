@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
 	"gx/ipfs/QmY5Grm8pJdiSSVsYxx4uNRgweY72EmYwuSDbRnbFok3iY/go-libp2p-peer"
@@ -8,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBroadcastRecord_String(t *testing.T) {
@@ -118,4 +120,26 @@ func Test(t *testing.T) {
 			t.Log(i, r)
 		}
 	}
+}
+
+func TestAsyncCtx(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	go func(c context.Context) {
+		<-c.Done()
+		t.Log("over", 0)
+	}(ctx)
+	go func(c context.Context) {
+		<-c.Done()
+		t.Log("over", 1)
+	}(ctx)
+	cancel()
+	t.Log("cancel")
+	<-time.After(3 * time.Second)
+}
+
+func TestList(t *testing.T) {
+	l := []int{0, 1, 2, 3, 4}
+	t.Log(len(l))
+	t.Log(l[0:5])
 }

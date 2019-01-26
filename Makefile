@@ -16,7 +16,8 @@ windows:
 linux:
 	CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -ldflags "-w -s" -o build/perception-linux-amd64 cmd/perception/main.go
 	tar czvf build/perception-linux-amd64.tar.gz build/perception-linux-amd64
-	@echo "Linux linux-x86 cross compilation done:"
+	@echo "Linux linux-amd64 cross compilation done:"
+
 arm-debug:
 	CGO_ENABLED=0 GOARCH=arm GOOS=linux go build -o build/perception-linux-arm-debug cmd/perception/main.go
 	@echo "Linux ARM cross compilation done:"

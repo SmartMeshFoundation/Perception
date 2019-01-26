@@ -3,13 +3,15 @@ package main
 import (
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/core"
+	"github.com/SmartMeshFoundation/Perception/core/discovery"
 	"github.com/SmartMeshFoundation/Perception/live"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/cc14514/go-geoip2-db"
 	"github.com/urfave/cli"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	logger "gx/ipfs/QmRREK2CAZ5Re2Bd9zZFG6FeYDppUWt5cMgsoUEp3ktgSr/go-log"
-	"gx/ipfs/QmV281Yximj5ftHwYMSRCLbFhErRxqUFP2F8Rfa19LeToz/go-libp2p/p2p/discovery"
+	"io/ioutil"
+
 	"os"
 	"runtime"
 	"time"
@@ -25,18 +27,20 @@ import (
 	"strings"
 )
 
-var log = logger.Logger("main")
-
-var coreNum = 2
+var (
+	log     = logger.Logger("main")
+	coreNum = 2
+	c       = context.Background()
+	cancel  context.CancelFunc
+)
 
 func init() {
+	_, cancel = context.WithCancel(c)
 	if runtime.NumCPU() > coreNum*8 {
 		coreNum = runtime.NumCPU() / 8
 	}
 	log4go.Info("cpu core used : %d", coreNum)
 	runtime.GOMAXPROCS(coreNum)
-
-	Stop = make(chan struct{})
 	App = cli.NewApp()
 	App.Name = os.Args[0]
 	App.Usage = "P2P network program"
@@ -60,6 +64,7 @@ func init() {
 		return nil
 	}
 	App.Before = func(ctx *cli.Context) error {
+		params.LivePort = ctx.GlobalInt("live")
 		if HOME_DIR != params.HomeDir {
 			params.SetHomeDir(HOME_DIR)
 		}
@@ -73,7 +78,11 @@ func init() {
 
 		idx := ctx.GlobalInt("loglevel")
 		level := LogLevel[idx]
-		log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
+		log4gowriter := log4go.NewConsoleLogWriter()
+		//log4gowriter.SetFormat("[%T %D] [%L] %M")
+		//log4gowriter.SetFormat("[%T %D] [%L] (%S) %M")
+		log4gowriter.SetFormat("[%L] (%S) %M")
+		log4go.AddFilter("stdout", log4go.Level(level), log4gowriter)
 		return nil
 	}
 	App.After = func(ctx *cli.Context) error {
@@ -81,6 +90,37 @@ func init() {
 		return nil
 	}
 	App.Commands = []cli.Command{
+		{
+			Name: "exit",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  "rpcport",
+					Usage: "http rpc listen port",
+					Value: params.DefaultHTTPPort,
+				},
+			},
+			Action: func(ctx *cli.Context) error {
+				client := &http.Client{}
+				params.HTTPPort = ctx.Int("rpcport")
+				exiturl := fmt.Sprintf(`http://localhost:%d/api/?body={"service":"funcs","method":"exit"}`, params.HTTPPort)
+				reqest, err := http.NewRequest("GET", exiturl, nil)
+				if err != nil {
+					log4go.Error(err)
+					return err
+				}
+				r, err := client.Do(reqest)
+				if err != nil {
+					log4go.Error(err)
+					return err
+				}
+				buf, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(buf))
+				return nil
+			},
+		},
 		{
 			Name: "version",
 			Action: func(ctx *cli.Context) error {
@@ -134,7 +174,7 @@ func start(ctx *cli.Context) {
 	}
 	port := ctx.GlobalInt("port")
 
-	Node = core.NewNode(prv, port)
+	Node = core.NewNode(c, cancel, prv, port)
 
 	Astab = agents.NewAstable(Node)
 	if AGENTSERVER != "" {
@@ -163,23 +203,26 @@ func start(ctx *cli.Context) {
 		Node.SetAgentClient(agentClient)
 	}
 
-	c := context.Background()
+	nd := ctx.GlobalBool("nodiscovery")
 	// setup mdns
-	ds, err := discovery.NewMdnsService(c, Node.Host(), time.Second*5, discovery.ServiceTag)
-	if err != nil {
-		log4go.Error("mdns error : %v", err)
-	} else {
-		Node.SetDiscovery(ds)
+	if !nd {
+		ds, err := discovery.NewMdnsService(c, Node.Host(), time.Second*5, discovery.ServiceTag)
+		if err != nil {
+			log4go.Error("mdns error : %v", err)
+		} else {
+			Node.SetDiscovery(ds)
+		}
 	}
 
 	// TODO 实验阶段
-	Node.SetLiveServer(live.NewLiveServer(Node, params.DefaultLivePort))
+	Node.SetLiveServer(live.NewLiveServer(Node, params.LivePort))
 
 	log4go.Info("myid : %s", Node.Host().ID().Pretty())
 	log4go.Info("myaddrs : %v", Node.Host().Network().ListenAddresses())
 	log4go.Info("homedir: %s", params.HomeDir)
 	log4go.Info("datadir: %s", params.DataDir)
-	Node.Start(false)
+	log4go.Info("version: %s", params.VERSION)
+	Node.Start(nd)
 	go AsyncActionLoop(c, Node)
 }
 

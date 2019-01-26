@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"github.com/SmartMeshFoundation/Perception/agents/pb"
@@ -97,7 +96,7 @@ func (self *AgentServerImpl) Start() {
 		}
 		if am.AgentServerList != nil {
 			log4go.Info("Broadcast self as agent-server in new thread.")
-			go ast.KeepBroadcast(context.Background(), myid, am, params.AgentServerBroadcastInterval)
+			go ast.KeepBroadcast(self.node.Context(), myid, am, params.AgentServerBroadcastInterval)
 		}
 	}()
 }

@@ -29,7 +29,7 @@ type ServerCfg struct {
 }
 
 var RtmpServercfg = ServerCfg{
-	Server: []Application{{Appname: "live", Liveon: "on"}},
+	Server: []Application{{Appname: "cc14514", Liveon: "on"}},
 }
 
 func LoadConfig(configfilename string) error {

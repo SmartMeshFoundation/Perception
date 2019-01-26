@@ -52,6 +52,11 @@ func PartialHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	res = append(res, response)
+	defer func() {
+		if response != nil && response.Body != nil {
+			response.Body.Close()
+		}
+	}()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -75,11 +80,14 @@ func PartialHandler(w http.ResponseWriter, req *http.Request) {
 	for {
 		size, err := response.Body.Read(buffer)
 		if err == nil {
-			w.Write(buffer[:size])
+			if _, e := w.Write(buffer[:size]); e != nil {
+				return
+			}
 		} else {
 			if err == io.EOF {
-				w.Write(buffer[:size])
-			} else {
+				if _, e := w.Write(buffer[:size]); e != nil {
+					return
+				}
 			}
 			break
 		}

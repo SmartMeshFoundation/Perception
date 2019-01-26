@@ -1,6 +1,6 @@
 package service
 
-import "gx/ipfs/QmYaVXmXZNpWs6owQ1rk5VAiwNinkTh2cYZuYx1JDSactL/go-lightrpc/rpcserver"
+import "gx/ipfs/QmVMCXmZjzL3jiMcapzDvLgsZ4EFP1CFuVGHsWLVBFB6ed/go-lightrpc/rpcserver"
 
 var ServiceRegMap = make(map[string]rpcserver.ServiceReg)
 

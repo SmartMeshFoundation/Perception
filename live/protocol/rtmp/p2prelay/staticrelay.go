@@ -3,9 +3,9 @@ package p2prelay
 import (
 	"errors"
 	"fmt"
-	"github.com/cc14514/superagent/live/av"
-	"github.com/cc14514/superagent/live/config"
-	"github.com/cc14514/superagent/live/protocol/rtmp/core"
+	"github.com/SmartMeshFoundation/Perception/live/av"
+	"github.com/SmartMeshFoundation/Perception/live/config"
+	"github.com/SmartMeshFoundation/Perception/live/protocol/rtmp/core"
 	"log"
 	"sync"
 )

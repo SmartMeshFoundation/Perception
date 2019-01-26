@@ -37,21 +37,21 @@ func handler(aa *params.AA, node types.Node) {
 			return
 		}
 		if node.Host().ID() == p {
-			log4go.Warn("<<AA_GET_AS_LOCATION>> skip_self = %v", aa.Payload)
+			log4go.Debug("<<AA_GET_AS_LOCATION>> skip_self = %v", aa.Payload)
 			return
 		}
 		_, duplicate := aa_get_as_location.LoadOrStore(p, 0)
 		if duplicate {
-			log4go.Warn("<<AA_GET_AS_LOCATION>> skip_duplicate = %v", aa.Payload)
+			log4go.Debug("<<AA_GET_AS_LOCATION>> skip_duplicate = %v", aa.Payload)
 			return
 		}
-		log4go.Info("<<AA_GET_AS_LOCATION>> accept = %v", aa.Payload)
+		log4go.Debug("<<AA_GET_AS_LOCATION>> accept = %v", aa.Payload)
 		ctx := context.Background()
 		for i := 1; i < 3; i++ {
 			<-time.After(time.Second * 2 * time.Duration(i))
 			req := agents_pb.NewMessage(agents_pb.AgentMessage_YOUR_LOCATION)
 			resp, err := Astab.SendMsg(ctx, p, req)
-			log4go.Info("<<AA_GET_AS_LOCATION>> result = %d , %v , %v", i, err, resp)
+			log4go.Debug("<<AA_GET_AS_LOCATION>> result = %d , %v , %v", i, err, resp)
 			if err == nil && tookit.VerifyLocation(resp.Location.Latitude, resp.Location.Longitude) {
 				defer aa_get_as_location.Delete(p)
 				gl := types.NewGeoLocation(float64(resp.Location.Longitude), float64(resp.Location.Latitude))
@@ -75,30 +75,6 @@ func handler(aa *params.AA, node types.Node) {
 				return
 			}
 		}
-		/*
-			if astab := Astab.GetTable(); astab != nil {
-				for p, l := range astab {
-					log4go.Info("do_handler : %s --> %d", p, len(l))
-					for i := len(l); i >= 0; i-- {
-						as := l[i]
-						if as.ID == node.Host().ID() {
-							log4go.Info("do_handler_skip_self : sent_my_localtion_message")
-							continue
-						}
-						if as.ID == "" {
-							log4go.Info("do_handler_skip_nil : sent_my_localtion_message")
-							continue
-						}
-						targetID := as.ID
-						err := Astab.QuerySelfLocation(targetID)
-						log4go.Info("do_handler : sent_my_localtion_message --> %s, err=%v", targetID, err)
-						if err == nil {
-							return
-						}
-					}
-				}
-			}
-		*/
 	}
 }
 

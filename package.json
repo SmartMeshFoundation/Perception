@@ -32,9 +32,9 @@
     },
     {
       "author": "liangc",
-      "hash": "QmYaVXmXZNpWs6owQ1rk5VAiwNinkTh2cYZuYx1JDSactL",
+      "hash": "QmVMCXmZjzL3jiMcapzDvLgsZ4EFP1CFuVGHsWLVBFB6ed",
       "name": "go-lightrpc",
-      "version": "0.0.1"
+      "version": "0.0.2"
     },
     {
       "author": "liangc",
@@ -129,7 +129,7 @@
       "hash": "QmaotkvehotV6Yvn8roarKxN96v6cnGmdKrHn3PW6BkiiV",
       "name": "go-geoip2-db",
       "version": "0.0.1"
-    },
+    }
   ],
   "gxVersion": "0.12.1",
   "language": "go",

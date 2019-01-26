@@ -17,23 +17,27 @@ import (
 func loop_bootstrap(node *NodeImpl) {
 	var wg sync.WaitGroup
 	q, qw := make(chan int), int32(0)
-	ctx := context.Background()
 	timer := time.NewTimer(time.Millisecond * 1)
 	defer timer.Stop()
 	go func() {
 		defer close(q)
 		<-q
-		node.Bootstrap(ctx)
+		node.Bootstrap()
 		log4go.Info("-- 🌍 routing bootstrap -->")
 		utils.Astab.Start()
 	}()
-	for range timer.C {
-		timer.Reset(time.Second * params.BootstrapInterval)
-		bootstrap(&wg, node)
-		wg.Wait()
-		if atomic.LoadInt32(&qw) == 0 && len(node.Host().Network().Peers()) >= 1 {
-			atomic.AddInt32(&qw, 1)
-			q <- 0
+	for {
+		select {
+		case <-timer.C:
+			timer.Reset(time.Second * params.BootstrapInterval)
+			bootstrap(&wg, node)
+			wg.Wait()
+			if atomic.LoadInt32(&qw) == 0 && len(node.Host().Network().Peers()) >= 1 {
+				atomic.AddInt32(&qw, 1)
+				q <- 0
+			}
+		case <-node.ctx.Done():
+			return
 		}
 	}
 

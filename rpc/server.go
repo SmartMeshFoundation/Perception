@@ -1,13 +1,15 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
+	"github.com/SmartMeshFoundation/Perception/cmd/utils"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/params"
 	"github.com/SmartMeshFoundation/Perception/rpc/service"
 	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
+	"gx/ipfs/QmVMCXmZjzL3jiMcapzDvLgsZ4EFP1CFuVGHsWLVBFB6ed/go-lightrpc/rpcserver"
 	"gx/ipfs/QmVmDhyTTUcQXFD1rRQ64fGLMSAoaQvNH3hwuaCFAPq2hy/errors"
-	"gx/ipfs/QmYaVXmXZNpWs6owQ1rk5VAiwNinkTh2cYZuYx1JDSactL/go-lightrpc/rpcserver"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,7 +23,7 @@ func NewRPCServer(node types.Node) *RPCServer {
 	return &RPCServer{node}
 }
 
-func (self *RPCServer) Start() {
+func (self *RPCServer) Start(ctx context.Context) {
 	port := params.HTTPPort
 	rs := &rpcserver.Rpcserver{
 		Port:       port,
@@ -47,10 +49,18 @@ func (self *RPCServer) Start() {
 		log4go.Info("rpc_server enable liveserver : /live/push")
 		rs.ServeMux.HandleFunc(hFn("/live/push"))
 	}
-
+	log4go.Info("RPC Service start on :%d", rs.Port)
+	go func() {
+		select {
+		case <-utils.Stop:
+			rs.StopServer()
+		case <-ctx.Done():
+			rs.StopServer()
+		}
+	}()
 	err := rs.StartServer()
 	if err == nil {
-		log4go.Info("RPC Service started. :%d", rs.Port)
+		log4go.Info("RPC Service stoped :%d", rs.Port)
 	} else {
 		log4go.Error("RPC Service started failed. :%d , err=%v", params.DefaultHTTPPort, err)
 	}

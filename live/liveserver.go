@@ -3,9 +3,9 @@ package live
 import (
 	"errors"
 	"fmt"
-	"github.com/alecthomas/log4go"
 	"github.com/SmartMeshFoundation/Perception/core/types"
 	"github.com/SmartMeshFoundation/Perception/live/protocol/rtmp"
+	"gx/ipfs/QmRNDQa8QhWUzbv64pKYtPJnCWXou84xfoboPkxCsfMqrQ/log4go"
 	"net"
 )
 
@@ -22,7 +22,7 @@ func NewLiveServer(node types.Node, port int) types.LiveServer {
 		rtmpAddr:   fmt.Sprintf(":%d", port),
 		rtmpStream: rtmp.NewRtmpStream(),
 	}
-	ls.controls = NewControls(ls.rtmpStream, ls.rtmpAddr)
+	ls.controls = NewControls(node, ls.rtmpStream, ls.rtmpAddr)
 	return ls
 }
 
@@ -44,15 +44,23 @@ func (self *LiveServerImpl) Start() error {
 		log4go.Error(err)
 		return err
 	}
+	go func() {
+		select {
+		case <-self.node.Context().Done():
+			rtmpListen.Close()
+		}
+	}()
 	var rtmpServer *rtmp.Server
-	rtmpServer = rtmp.NewRtmpServer(self.rtmpStream)
+	rtmpServer = rtmp.NewRtmpServer(self.node, self.rtmpStream)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log4go.Error("RTMP server panic: %v", r)
 			}
 		}()
-		log4go.Info("RTMP Listen On %s , push path : /live/%s", self.rtmpAddr, self.node.Host().ID().Pretty())
+		log4go.Info("--------------------------------------------------------------------------")
+		log4go.Info("rtmp on %s, /cc14514/%s", self.rtmpAddr, self.node.Host().ID().Pretty())
+		log4go.Info("--------------------------------------------------------------------------")
 		rtmpServer.Serve(rtmpListen)
 	}()
 	return nil

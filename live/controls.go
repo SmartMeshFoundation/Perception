@@ -47,13 +47,15 @@ type Controls struct {
 	handler  av.Handler
 	session  map[string]*rtmprelay.RtmpRelay
 	rtmpAddr string
+	node     types.Node
 }
 
-func NewControls(h av.Handler, rtmpAddr string) *Controls {
+func NewControls(n types.Node, h av.Handler, rtmpAddr string) *Controls {
 	return &Controls{
 		handler:  h,
 		session:  make(map[string]*rtmprelay.RtmpRelay),
 		rtmpAddr: rtmpAddr,
+		node:     n,
 	}
 }
 
@@ -128,7 +130,7 @@ func (self *Controls) State(w http.ResponseWriter, req *http.Request) {
 	w.Write(resp)
 }
 
-//http://127.0.0.1:8090/control/push?&oper=start&app=live&name=123456&url=rtmp://192.168.16.136/live/123456
+//http://127.0.0.1:8090/control/pull?&oper=start&app=live&name=123456&url=rtmp://192.168.16.136/live/123456
 func (s *Controls) Pull(w http.ResponseWriter, req *http.Request) {
 	var retString string
 	var err error
